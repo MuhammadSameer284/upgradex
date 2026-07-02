@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+.commented-line {
+    background: rgba(127, 119, 221, 0.08) !important;
+    border-left: 2px solid rgba(127, 119, 221, 0.5) !important;
+}
