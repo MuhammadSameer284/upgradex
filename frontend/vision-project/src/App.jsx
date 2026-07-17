@@ -1,61 +1,83 @@
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import Sidebar from "./Components/Sidebar";
-import Login from "./Pages/Login";
-import Signup from "./Pages/Signup";
-import Dashboard from "./pages/Dashboard";
-import KanbanBoard from "./Pages/KanbanBoard";
-import Projects from "./Pages/Projects";
-import Footer from "./Components/Footer";
-import CodeReview from "./Pages/CodeReview";
-import VideoCall from "./Pages/VideoCall";
-import Portfolio from "./Pages/Portfolio";
-import Tasks from "./Pages/Tasks";
-import Profile from "./Pages/Profile";
-import Settings from "./Pages/Settings";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "./Context/authContext.jsx";
+import ProtectedRoute from "./Components/ProtectedRoute.jsx";
+import Sidebar from "./Components/Sidebar.jsx";
 
-// Pages where sidebar should NOT appear
-const noSidebarPages = ["/login", "/signup"];
-const noFooter = ["/login", "/signup"];
+// Pages
+import Login from "./Pages/Login.jsx";
+import Signup from "./Pages/Signup.jsx";
+import Dashboard from "./Pages/Dashboard.jsx";
+import InstructorDashboard from "./Pages/InstructorDashboard.jsx";
+import Projects from "./Pages/Projects.jsx";
+import KanbanBoard from "./Pages/KanbanBoard.jsx";
+import CodeReview from "./Pages/CodeReview.jsx";
+import VideoCall from "./Pages/VideoCall.jsx";
+import Portfolio from "./Pages/Portfolio.jsx";
+import Tasks from "./Pages/Tasks.jsx";
+import Profile from "./Pages/Profile.jsx";
+import Settings from "./Pages/Settings.jsx";
+
+const NO_SIDEBAR = ["/login", "/signup"];
 
 function Layout() {
   const location = useLocation();
-  const showSidebar = !noSidebarPages.includes(location.pathname);
-  const showFooter = !noFooter.includes(location.pathname);
+  const { user } = useAuth();
+  const showSidebar = !NO_SIDEBAR.includes(location.pathname);
 
   return (
-    <>
-      <div className="flex min-h-screen" style={{ background: "#0a0a14" }}>
-        {showSidebar && <Sidebar />}
+    <div className="flex min-h-screen" style={{ background: "#0a0a14" }}>
+      {showSidebar && <Sidebar />}
+      <main className="flex-1 overflow-y-auto">
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
-        {/* Page content fills remaining space */}
-        <main className="flex-1 overflow-y-auto">
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/kanban" element={<KanbanBoard />} />
-            <Route path="/projects" element={<Projects />} />
-            {/* <Route path="/projects/new" element={<Projects />} /> */}
-            <Route path="/review" element={<CodeReview />} />
-            <Route path="/video" element={<VideoCall />} />
-            <Route path="/portfolio" element={<Portfolio />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-          {showFooter && < Footer />}
-        </main>
-      </div>
-    </>
+          {/* Root redirect based on role */}
+          <Route path="/" element={
+            user
+              ? user.role === "instructor"
+                ? <Navigate to="/instructor/dashboard" replace />
+                : <Navigate to="/dashboard" replace />
+              : <Navigate to="/login" replace />
+          } />
+
+          {/* Student protected routes */}
+          <Route path="/dashboard" element={
+            <ProtectedRoute allowedRole="student">
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+
+          {/* Instructor protected routes */}
+          <Route path="/instructor/dashboard" element={
+            <ProtectedRoute allowedRole="instructor">
+              <InstructorDashboard />
+            </ProtectedRoute>
+          } />
+
+          {/* Shared protected routes */}
+          <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+          <Route path="/kanban" element={<ProtectedRoute><KanbanBoard /></ProtectedRoute>} />
+          <Route path="/review" element={<ProtectedRoute><CodeReview /></ProtectedRoute>} />
+          <Route path="/video" element={<ProtectedRoute><VideoCall /></ProtectedRoute>} />
+          <Route path="/portfolio" element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
+          <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+
+          {/* Catch all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+    </div>
   );
 }
 
-function App() {
+export default function App() {
   return (
-
-    <Layout />
-
+    <BrowserRouter>
+      <Layout />
+    </BrowserRouter>
   );
 }
-
-export default App;

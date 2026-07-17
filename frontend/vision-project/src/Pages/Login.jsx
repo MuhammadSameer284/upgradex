@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { login } from "../config/authService";
+import { login } from "../config/authService.jsx";
 
 function Login() {
     const navigate = useNavigate();
@@ -12,14 +12,21 @@ function Login() {
     const handleLogin = async (e) => {
         e.preventDefault();
         try {
-            const res = await login({ email, password, role });
-            console.log('Logged In', res.data);
-            localStorage.setItem('token', res.data.token);
-            if (res.data.role === 'instructor') {
-                navigate('/instructor/dashboard');
-            } else {
-                navigate('/');
-            }
+            const res = await login({ email, password });
+
+            // Save token
+            localStorage.setItem("upgradex_token", res.data.token);
+
+            // Save user info including role
+            localStorage.setItem("upgradex_user", JSON.stringify(res.data.user));
+
+            // Redirect based on role
+            // if (res.data.user.role === "instructor") {
+            //     navigate("/instructor/dashboard");
+            // } else {
+                navigate("/");
+            // }
+
         } catch (error) {
             setError(error.response?.data?.message || "Login Failed!");
         }

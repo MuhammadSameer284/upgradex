@@ -21,7 +21,24 @@ export const register = async (req, res) => {
         const newUser = new user({ name, email, password: hashedPassword, role });
         await newUser.save();
 
-        res.status(201).json({ message: "User Registered Successfully!" });
+        //generating token
+        const token = jwt.sign(
+            { id: newUser._id, role: newUser.role },
+            process.env.JWT_SECRET,
+            { expires: '1d' }
+        );
+
+
+        res.status(201).json({
+            message: "User Registered Successfully!",
+            token,
+            user: {
+                id: newUser._id,
+                name: newUser.name,
+                email: newUser.email,
+                role: newUser.role
+            }
+        });
     } catch (error) {
         res.status(500).json({ message: "Server Error", error: error.message });
     }
@@ -29,14 +46,12 @@ export const register = async (req, res) => {
 
 // Login
 
-// import user from '../models/authModel.js' // ✅ make sure model is imported with capital U
-
 export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
         // checking email
-        const existingUser = await user.findOne({ email }); 
+        const existingUser = await user.findOne({ email });
         if (!existingUser) return res.status(404).json({ message: "User not found!" });
 
         // comparing password
@@ -53,7 +68,12 @@ export const login = async (req, res) => {
         res.json({
             message: "Logged In Successfully!",
             token,
-            role: existingUser.role
+            user: {
+                id: existingUser._id,
+                name: existingUser.name,
+                email: existingUser.email,
+                role: existingUser.role
+            }
         });
 
     } catch (error) {

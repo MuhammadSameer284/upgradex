@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useAuth } from '../Context/authContext.jsx';
 import Editor from "@monaco-editor/react";
 
 // ─── Sample code shown in the editor ────────────────────────────
@@ -44,6 +45,8 @@ const INITIAL_COMMENTS = [
 
 // ─── Comment Card (sidebar) ──────────────────────────────────────
 function CommentCard({ comment, onResolve, onClick }) {
+    const { user } = useAuth();
+
     return (
         <div
             onClick={onClick}
@@ -87,7 +90,7 @@ function CommentCard({ comment, onResolve, onClick }) {
                 </div>
                 <div className="flex items-center gap-2">
                     <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)" }}>{comment.time}</span>
-                    {!comment.resolved && (
+                    {!comment.resolved && user?.role === "instructor" && (
                         <button
                             onClick={e => { e.stopPropagation(); onResolve(comment.id); }}
                             className="text-[10px] px-2 py-0.5 rounded-full transition-all"
@@ -104,6 +107,7 @@ function CommentCard({ comment, onResolve, onClick }) {
 
 // ─── Main Code Review Page ───────────────────────────────────────
 export default function CodeReview() {
+    const { user } = useAuth();
     const [comments, setComments] = useState(INITIAL_COMMENTS);
     const [selectedLine, setSelectedLine] = useState(null);
     const [commentText, setCommentText] = useState("");
@@ -264,25 +268,39 @@ export default function CodeReview() {
                         {languages.map(l => <option key={l} value={l}>{l}</option>)}
                     </select>
 
-                    {/* Approve */}
-                    <button
-                        onClick={() => setStatus("approved")}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                        style={{ background: "rgba(29,158,117,0.12)", color: "#5DCAA5", border: "none", cursor: "pointer" }}
-                    >
-                        <i className="ti ti-check" aria-hidden="true" style={{ fontSize: "13px" }} />
-                        Approve
-                    </button>
+                    {/* Instructor only — Approve and Request changes */}
+                    {user?.role === "instructor" && (
+                        <>
+                            <button
+                                onClick={() => setStatus("approved")}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                                style={{ background: "rgba(29,158,117,0.12)", color: "#5DCAA5", border: "none", cursor: "pointer" }}
+                            >
+                                <i className="ti ti-check" aria-hidden="true" style={{ fontSize: "13px" }} />
+                                Approve
+                            </button>
 
-                    {/* Request changes */}
-                    <button
-                        onClick={() => setStatus("changes")}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                        style={{ background: "rgba(224,75,74,0.12)", color: "#E86C6B", border: "none", cursor: "pointer" }}
-                    >
-                        <i className="ti ti-x" aria-hidden="true" style={{ fontSize: "13px" }} />
-                        Request changes
-                    </button>
+                            <button
+                                onClick={() => setStatus("changes")}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                                style={{ background: "rgba(224,75,74,0.12)", color: "#E86C6B", border: "none", cursor: "pointer" }}
+                            >
+                                <i className="ti ti-x" aria-hidden="true" style={{ fontSize: "13px" }} />
+                                Request changes
+                            </button>
+                        </>
+                    )}
+
+                    {/* Student only — Submit for review */}
+                    {user?.role === "student" && (
+                        <button
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all"
+                            style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
+                        >
+                            <i className="ti ti-upload" aria-hidden="true" style={{ fontSize: "13px" }} />
+                            Submit for review
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -429,6 +447,6 @@ export default function CodeReview() {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

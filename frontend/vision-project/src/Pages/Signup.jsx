@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { register } from "../config/authService";
+import { register } from "../config/authService.jsx";
 
 function Signup() {
-    const navigate = useNavigate(); 
+    const navigate = useNavigate();
 
     const [role, setRole] = useState("student");
     const [passStrength, setPassStrength] = useState(0);
@@ -13,7 +13,7 @@ function Signup() {
     const [error, setError] = useState("");
 
     const handlePassword = (e) => {
-        setPassword(e.target.value); 
+        setPassword(e.target.value);
         const len = e.target.value.length;
         setPassStrength(Math.min(len * 8, 100));
     };
@@ -25,9 +25,20 @@ function Signup() {
         e.preventDefault();
         try {
             const res = await register({ name, email, password, role });
-            console.log('Registered Successfully!', res.data);
-            localStorage.setItem('token', res.data.token);
-            navigate("/"); 
+
+            // Save token
+            localStorage.setItem("upgradex_token", res.data.token);
+
+            // Save user info including role
+            localStorage.setItem("upgradex_user", JSON.stringify(res.data.user));
+
+            // Redirect based on role
+            // if (res.data.user.role === "instructor") {
+                navigate("/");
+            // } else {
+            //     navigate("/dashboard");
+            // }
+
         } catch (error) {
             setError(error.response?.data?.message || "Registration Failed!");
         }
