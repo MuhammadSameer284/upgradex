@@ -1,20 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../Context/authContext.jsx";
 
-// ─── Participants data (later comes from backend) ────────────────
 const PARTICIPANTS = [
-    { id: 1, initials: "SK", name: "Sir Khalid", role: "Instructor", bg: "linear-gradient(135deg,#0F6E56,#1D9E75)", speaking: true, muted: false },
-    { id: 2, initials: "MS", name: "Muhammad Sameer", role: "You", bg: "linear-gradient(135deg,#534AB7,#7F77DD)", speaking: false, muted: false },
-    { id: 3, initials: "SR", name: "Sara Raza", role: "Student", bg: "linear-gradient(135deg,#712B13,#D85A30)", speaking: false, muted: true },
+    { id: 1, initials: "SK", name: "Sir Khalid",      role: "Instructor", bg: "linear-gradient(135deg,#0F6E56,#1D9E75)", speaking: true,  muted: false },
+    { id: 2, initials: "MS", name: "Muhammad Sameer", role: "You",        bg: "linear-gradient(135deg,#534AB7,#7F77DD)", speaking: false, muted: false },
+    { id: 3, initials: "SR", name: "Sara Raza",       role: "Student",    bg: "linear-gradient(135deg,#712B13,#D85A30)", speaking: false, muted: true  },
 ];
 
 const INITIAL_MESSAGES = [
-    { id: 1, sender: "Sir Khalid", initials: "SK", bg: "linear-gradient(135deg,#0F6E56,#1D9E75)", text: "Let's go through the auth controller first.", mine: false },
-    { id: 2, sender: "Sir Khalid", initials: "SK", bg: "linear-gradient(135deg,#0F6E56,#1D9E75)", text: "Line 10 — validate email before querying the DB.", mine: false },
+    { id: 1, sender: "Sir Khalid",      initials: "SK", bg: "linear-gradient(135deg,#0F6E56,#1D9E75)", text: "Let's go through the auth controller first.", mine: false },
+    { id: 2, sender: "Sir Khalid",      initials: "SK", bg: "linear-gradient(135deg,#0F6E56,#1D9E75)", text: "Line 10 — validate email before querying the DB.", mine: false },
     { id: 3, sender: "Muhammad Sameer", initials: "MS", bg: "linear-gradient(135deg,#534AB7,#7F77DD)", text: "Got it, I'll add a regex check right away.", mine: true },
 ];
 
-// ─── Video Tile ──────────────────────────────────────────────────
 function VideoTile({ participant, large }) {
     return (
         <div
@@ -25,47 +24,39 @@ function VideoTile({ participant, large }) {
                 minHeight: large ? "100%" : "140px",
             }}
         >
-            {/* Gradient orb background */}
             <div
                 className="absolute inset-0 pointer-events-none"
                 style={{
-                    background: `radial-gradient(circle at 40% 40%, ${participant.bg.includes("534AB7") ? "rgba(83,74,183,0.15)" :
+                    background: `radial-gradient(circle at 40% 40%, ${
+                        participant.bg.includes("534AB7") ? "rgba(83,74,183,0.15)" :
                         participant.bg.includes("0F6E56") ? "rgba(15,110,86,0.15)" :
-                            "rgba(113,43,19,0.15)"
-                        }, transparent 65%)`,
+                        "rgba(113,43,19,0.15)"
+                    }, transparent 65%)`,
                 }}
             />
-
-            {/* Speaking ring */}
             {participant.speaking && (
                 <div
                     className="absolute inset-0 rounded-xl pointer-events-none"
                     style={{ border: "2px solid rgba(29,158,117,0.5)", animation: "speakPulse 1.5s infinite" }}
                 />
             )}
-
-            {/* Avatar */}
             <div
                 className="flex items-center justify-center font-semibold text-white rounded-full relative z-10 flex-shrink-0"
                 style={{
-                    width: large ? "72px" : "48px",
-                    height: large ? "72px" : "48px",
+                    width:    large ? "72px" : "48px",
+                    height:   large ? "72px" : "48px",
                     fontSize: large ? "24px" : "16px",
                     background: participant.bg,
                 }}
             >
                 {participant.initials}
             </div>
-
-            {/* Name label */}
             <div
                 className="absolute bottom-2 left-2.5 text-[10px] font-medium text-white px-2 py-0.5 rounded-full"
                 style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
             >
                 {participant.name} {participant.role === "You" && "· You"}
             </div>
-
-            {/* Muted icon */}
             {participant.muted && (
                 <div
                     className="absolute bottom-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
@@ -78,7 +69,6 @@ function VideoTile({ participant, large }) {
     );
 }
 
-// ─── Control Button ──────────────────────────────────────────────
 function CtrlBtn({ icon, iconOff, active, onClick, danger, large, label }) {
     return (
         <button
@@ -87,15 +77,10 @@ function CtrlBtn({ icon, iconOff, active, onClick, danger, large, label }) {
             aria-label={label}
             className="flex items-center justify-center rounded-full transition-all flex-shrink-0"
             style={{
-                width: large ? "52px" : "44px",
-                height: large ? "52px" : "44px",
-                background: danger
-                    ? "#E24B4A"
-                    : active
-                        ? "rgba(255,255,255,0.1)"
-                        : "rgba(224,75,74,0.2)",
-                border: "none",
-                cursor: "pointer",
+                width:      large ? "52px" : "44px",
+                height:     large ? "52px" : "44px",
+                background: danger ? "#E24B4A" : active ? "rgba(255,255,255,0.1)" : "rgba(224,75,74,0.2)",
+                border: "none", cursor: "pointer",
             }}
             onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
             onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
@@ -112,22 +97,21 @@ function CtrlBtn({ icon, iconOff, active, onClick, danger, large, label }) {
     );
 }
 
-// ─── Main Video Call Page ────────────────────────────────────────
 export default function VideoCall() {
-    const [joined, setJoined] = useState(false);
-    const [micOn, setMicOn] = useState(true);
-    const [camOn, setCamOn] = useState(true);
-    const [screenOn, setScreenOn] = useState(false);
-    const [panelTab, setPanelTab] = useState(null); // null | "chat" | "people"
-    const [messages, setMessages] = useState(INITIAL_MESSAGES);
-    const [msgText, setMsgText] = useState("");
-    const [msgCounter, setMsgCounter] = useState(4);
-    const [seconds, setSeconds] = useState(0);
-    const timerRef = useRef(null);
+    const { user }                              = useAuth();
+    const [joined,       setJoined]             = useState(false);
+    const [micOn,        setMicOn]              = useState(true);
+    const [camOn,        setCamOn]              = useState(true);
+    const [screenOn,     setScreenOn]           = useState(false);
+    const [panelTab,     setPanelTab]           = useState(null);
+    const [messages,     setMessages]           = useState(INITIAL_MESSAGES);
+    const [msgText,      setMsgText]            = useState("");
+    const [msgCounter,   setMsgCounter]         = useState(4);
+    const [seconds,      setSeconds]            = useState(0);
+    const timerRef   = useRef(null);
     const chatEndRef = useRef(null);
-    const navigate = useNavigate();
+    const navigate   = useNavigate();
 
-    // ── Timer ─────────────────────────────────────────────────────
     useEffect(() => {
         if (joined) {
             timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
@@ -135,61 +119,46 @@ export default function VideoCall() {
         return () => clearInterval(timerRef.current);
     }, [joined]);
 
-    // ── Auto scroll chat ──────────────────────────────────────────
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
     const formatTime = (s) => {
-        const m = String(Math.floor(s / 60)).padStart(2, "0");
+        const m   = String(Math.floor(s / 60)).padStart(2, "0");
         const sec = String(s % 60).padStart(2, "0");
         return `${m}:${sec}`;
     };
 
-    // ── Send chat message ─────────────────────────────────────────
     const sendMessage = () => {
         if (!msgText.trim()) return;
-
-        // 🔌 Socket.io — emit when backend is ready:
-        // socket.emit("call-message", { roomId: "project-1", text: msgText });
-
+        const initials = user?.name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() || "U";
         setMessages(prev => [...prev, {
-            id: msgCounter,
-            sender: "Muhammad Sameer",
-            initials: "MS",
-            bg: "linear-gradient(135deg,#534AB7,#7F77DD)",
-            text: msgText.trim(),
-            mine: true,
+            id:       msgCounter,
+            sender:   user?.name || "You",
+            initials,
+            bg:       "linear-gradient(135deg,#534AB7,#7F77DD)",
+            text:     msgText.trim(),
+            mine:     true,
         }]);
         setMsgCounter(c => c + 1);
         setMsgText("");
     };
 
-    // ── End call ──────────────────────────────────────────────────
     const handleEndCall = () => {
         clearInterval(timerRef.current);
         setJoined(false);
         setSeconds(0);
         setScreenOn(false);
-
-        // 🔌 Socket.io — emit when backend is ready:
-        // socket.emit("end-call", { roomId: "project-1" });
     };
 
-    // ─────────────────────────────────────────────────────────────
-    // PRE-JOIN SCREEN
-    // ─────────────────────────────────────────────────────────────
+    // ── Pre-join screen ──────────────────────────────────────────
     if (!joined) {
         return (
-            <div
-                className="min-h-screen flex items-center justify-center"
-                style={{ background: "#070710" }}
-            >
+            <div className="min-h-screen flex items-center justify-center" style={{ background: "#070710" }}>
                 <div
                     className="w-72 rounded-2xl p-6 text-center"
                     style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.08)" }}
                 >
-                    {/* Camera preview placeholder */}
                     <div
                         className="w-full rounded-xl flex items-center justify-center mb-5 relative overflow-hidden"
                         style={{ height: "150px", background: "linear-gradient(135deg,#12121f,#1a1a2e)" }}
@@ -202,7 +171,7 @@ export default function VideoCall() {
                             className="w-14 h-14 rounded-full flex items-center justify-center font-semibold text-white text-xl relative z-10"
                             style={{ background: "linear-gradient(135deg,#534AB7,#7F77DD)" }}
                         >
-                            MS
+                            {user?.name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() || "UX"}
                         </div>
                     </div>
 
@@ -211,11 +180,10 @@ export default function VideoCall() {
                         E-Commerce Review · Sir Khalid is waiting
                     </p>
 
-                    {/* Pre-join controls */}
                     <div className="flex justify-center gap-3 mb-5">
                         {[
                             { icon: "ti-microphone", iconOff: "ti-microphone-off", state: micOn, set: setMicOn, label: "Toggle microphone" },
-                            { icon: "ti-video", iconOff: "ti-video-off", state: camOn, set: setCamOn, label: "Toggle camera" },
+                            { icon: "ti-video",      iconOff: "ti-video-off",      state: camOn, set: setCamOn, label: "Toggle camera"     },
                         ].map(c => (
                             <button
                                 key={c.icon}
@@ -224,8 +192,7 @@ export default function VideoCall() {
                                 className="w-10 h-10 rounded-full flex items-center justify-center transition-all"
                                 style={{
                                     background: c.state ? "rgba(255,255,255,0.07)" : "rgba(224,75,74,0.15)",
-                                    border: "0.5px solid rgba(255,255,255,0.1)",
-                                    cursor: "pointer",
+                                    border: "0.5px solid rgba(255,255,255,0.1)", cursor: "pointer",
                                 }}
                             >
                                 <i
@@ -236,6 +203,17 @@ export default function VideoCall() {
                             </button>
                         ))}
                     </div>
+
+                    {/* ✅ Instructor can schedule, student just joins */}
+                    {user?.role === "instructor" && (
+                        <button
+                            className="w-full py-2.5 rounded-xl text-xs font-medium mb-2 transition-all"
+                            style={{ background: "rgba(127,119,221,0.12)", border: "0.5px solid rgba(127,119,221,0.25)", color: "#AFA9EC", cursor: "pointer" }}
+                        >
+                            <i className="ti ti-calendar-plus mr-1.5" aria-hidden="true" />
+                            Schedule a call
+                        </button>
+                    )}
 
                     <button
                         onClick={() => setJoined(true)}
@@ -249,39 +227,22 @@ export default function VideoCall() {
         );
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // IN-CALL SCREEN
-    // ─────────────────────────────────────────────────────────────
+    // ── In-call screen ───────────────────────────────────────────
     return (
-        <div
-            className="h-screen flex flex-col relative overflow-hidden"
-            style={{ background: "#070710" }}
-        >
-            {/* Inject speaking animation */}
-            <style>{`
-        @keyframes speakPulse {
-          0%, 100% { opacity: 0.8; }
-          50%       { opacity: 0.2; }
-        }
-      `}</style>
+        <div className="h-screen flex flex-col relative overflow-hidden" style={{ background: "#070710" }}>
+            <style>{`@keyframes speakPulse { 0%, 100% { opacity: 0.8; } 50% { opacity: 0.2; } }`}</style>
 
-            {/* ── Top bar ── */}
+            {/* Top bar */}
             <div
                 className="flex items-center justify-between px-5 py-3 z-10 flex-shrink-0"
-                style={{
-                    background: "linear-gradient(to bottom, rgba(7,7,16,0.92), transparent)",
-                    position: "absolute", top: 0, left: 0, right: 0,
-                }}
+                style={{ background: "linear-gradient(to bottom, rgba(7,7,16,0.92), transparent)", position: "absolute", top: 0, left: 0, right: 0 }}
             >
                 <div>
                     <div className="text-sm font-medium text-white">E-Commerce Platform · Code Review</div>
                     <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>UpgradeX Video Call</div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <span
-                        className="text-xs font-mono px-3 py-1 rounded-full"
-                        style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}
-                    >
+                    <span className="text-xs font-mono px-3 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}>
                         {formatTime(seconds)}
                     </span>
                     <div className="flex items-center gap-1.5 text-xs" style={{ color: "#5DCAA5" }}>
@@ -291,91 +252,61 @@ export default function VideoCall() {
                 </div>
             </div>
 
-            {/* ── Video grid ── */}
+            {/* Video grid */}
             <div
                 className="flex-1 p-4 gap-3"
-                style={{
-                    display: "grid",
-                    paddingTop: "64px",
-                    paddingBottom: "88px",
-                    gridTemplateColumns: "1fr 1fr",
-                    gridTemplateRows: "1fr 1fr",
-                }}
+                style={{ display: "grid", paddingTop: "64px", paddingBottom: "88px", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr" }}
             >
-                {/* Large tile — instructor */}
-                <div style={{ gridColumn: "1/2", gridRow: "1/3" }}>
-                    <VideoTile participant={PARTICIPANTS[0]} large />
-                </div>
-
-                {/* Small tile — you */}
-                <div style={{ gridColumn: "2/3", gridRow: "1/2" }}>
-                    <VideoTile participant={PARTICIPANTS[1]} large={false} />
-                </div>
-
-                {/* Small tile — Sara */}
-                <div style={{ gridColumn: "2/3", gridRow: "2/3" }}>
-                    <VideoTile participant={PARTICIPANTS[2]} large={false} />
-                </div>
+                <div style={{ gridColumn: "1/2", gridRow: "1/3" }}><VideoTile participant={PARTICIPANTS[0]} large /></div>
+                <div style={{ gridColumn: "2/3", gridRow: "1/2" }}><VideoTile participant={PARTICIPANTS[1]} large={false} /></div>
+                <div style={{ gridColumn: "2/3", gridRow: "2/3" }}><VideoTile participant={PARTICIPANTS[2]} large={false} /></div>
             </div>
 
-            {/* ── Controls bar ── */}
+            {/* Controls */}
             <div
-                className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-3 px-6 pb-6 pt-10 z-10 flex-shrink-0"
+                className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-3 px-6 pb-6 pt-10 z-10"
                 style={{ background: "linear-gradient(to top, rgba(7,7,16,0.95), transparent)" }}
             >
-                <CtrlBtn icon="ti-microphone" iconOff="ti-microphone-off" active={micOn} onClick={() => setMicOn(!micOn)} label="Toggle microphone" />
-                <CtrlBtn icon="ti-video" iconOff="ti-video-off" active={camOn} onClick={() => setCamOn(!camOn)} label="Toggle camera" />
-                <CtrlBtn icon="ti-screen-share" active={screenOn} onClick={() => setScreenOn(!screenOn)} label="Share screen" />
+                <CtrlBtn icon="ti-microphone"   iconOff="ti-microphone-off" active={micOn}    onClick={() => setMicOn(!micOn)}       label="Toggle microphone" />
+                <CtrlBtn icon="ti-video"        iconOff="ti-video-off"      active={camOn}    onClick={() => setCamOn(!camOn)}       label="Toggle camera"     />
+                <CtrlBtn icon="ti-screen-share"                             active={screenOn} onClick={() => setScreenOn(!screenOn)} label="Share screen"      />
 
-                {/* Chat */}
                 <button
                     onClick={() => setPanelTab(panelTab === "chat" ? null : "chat")}
                     aria-label="Chat"
                     className="flex items-center justify-center w-11 h-11 rounded-full transition-all relative"
-                    style={{
-                        background: panelTab === "chat" ? "rgba(127,119,221,0.25)" : "rgba(255,255,255,0.1)",
-                        border: "none", cursor: "pointer",
-                    }}
+                    style={{ background: panelTab === "chat" ? "rgba(127,119,221,0.25)" : "rgba(255,255,255,0.1)", border: "none", cursor: "pointer" }}
                     onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
                     onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
                 >
                     <i className="ti ti-message" aria-hidden="true" style={{ fontSize: "20px", color: panelTab === "chat" ? "#AFA9EC" : "rgba(255,255,255,0.7)" }} />
-                    {/* Unread dot */}
-                    <span
-                        className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                        style={{ background: "#7F77DD", border: "1.5px solid #070710" }}
-                    />
+                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: "#7F77DD", border: "1.5px solid #070710" }} />
                 </button>
 
-                {/* People */}
                 <button
                     onClick={() => setPanelTab(panelTab === "people" ? null : "people")}
                     aria-label="Participants"
                     className="flex items-center justify-center w-11 h-11 rounded-full transition-all"
-                    style={{
-                        background: panelTab === "people" ? "rgba(127,119,221,0.25)" : "rgba(255,255,255,0.1)",
-                        border: "none", cursor: "pointer",
-                    }}
+                    style={{ background: panelTab === "people" ? "rgba(127,119,221,0.25)" : "rgba(255,255,255,0.1)", border: "none", cursor: "pointer" }}
                     onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
                     onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
                 >
                     <i className="ti ti-users" aria-hidden="true" style={{ fontSize: "20px", color: panelTab === "people" ? "#AFA9EC" : "rgba(255,255,255,0.7)" }} />
                 </button>
 
-                {/* End call */}
                 <button
                     onClick={handleEndCall}
                     aria-label="End call"
                     className="flex items-center justify-center rounded-full transition-all"
                     style={{ width: "52px", height: "52px", background: "#E24B4A", border: "none", cursor: "pointer" }}
                     onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.08)"; e.currentTarget.style.background = "#C73B3B"; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.background = "#E24B4A"; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)";   e.currentTarget.style.background = "#E24B4A"; }}
                 >
                     <i className="ti ti-phone-off" aria-hidden="true" style={{ fontSize: "22px", color: "#fff" }} />
                 </button>
             </div>
 
-            {/* ── Side Panel (Chat / People) ── */}
+            {/* Side panel */}
             <div
                 className="absolute right-0 top-0 bottom-0 flex flex-col z-20 transition-transform duration-300"
                 style={{
@@ -385,7 +316,6 @@ export default function VideoCall() {
                     transform: panelTab ? "translateX(0)" : "translateX(100%)",
                 }}
             >
-                {/* Panel tabs */}
                 <div className="flex flex-shrink-0" style={{ borderBottom: "0.5px solid rgba(255,255,255,0.07)" }}>
                     {["chat", "people"].map(tab => (
                         <button
@@ -393,11 +323,9 @@ export default function VideoCall() {
                             onClick={() => setPanelTab(tab)}
                             className="flex-1 py-3 text-xs capitalize transition-all"
                             style={{
-                                background: "transparent",
-                                border: "none",
+                                background: "transparent", border: "none",
                                 borderBottom: panelTab === tab ? "1.5px solid #7F77DD" : "1.5px solid transparent",
-                                color: panelTab === tab ? "#AFA9EC" : "rgba(255,255,255,0.3)",
-                                cursor: "pointer",
+                                color: panelTab === tab ? "#AFA9EC" : "rgba(255,255,255,0.3)", cursor: "pointer",
                             }}
                         >
                             {tab === "people" ? `People (${PARTICIPANTS.length})` : "Chat"}
@@ -412,30 +340,22 @@ export default function VideoCall() {
                     </button>
                 </div>
 
-                {/* ── Chat tab ── */}
                 {panelTab === "chat" && (
                     <>
                         <div className="flex-1 overflow-y-auto p-3 space-y-3">
                             {messages.map(m => (
                                 <div key={m.id} className={`flex gap-2 ${m.mine ? "flex-row-reverse" : ""}`}>
                                     {!m.mine && (
-                                        <div
-                                            className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold text-white flex-shrink-0 mt-0.5"
-                                            style={{ background: m.bg }}
-                                        >
+                                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold text-white flex-shrink-0 mt-0.5" style={{ background: m.bg }}>
                                             {m.initials}
                                         </div>
                                     )}
-                                    <div className={`max-w-[80%] ${m.mine ? "items-end" : "items-start"} flex flex-col`}>
-                                        {!m.mine && (
-                                            <div className="text-[10px] mb-0.5 ml-1" style={{ color: "rgba(255,255,255,0.3)" }}>
-                                                {m.sender}
-                                            </div>
-                                        )}
+                                    <div className={`max-w-[80%] flex flex-col ${m.mine ? "items-end" : "items-start"}`}>
+                                        {!m.mine && <div className="text-[10px] mb-0.5 ml-1" style={{ color: "rgba(255,255,255,0.3)" }}>{m.sender}</div>}
                                         <div
                                             className="px-3 py-1.5 text-xs leading-relaxed"
                                             style={{
-                                                background: m.mine ? "rgba(127,119,221,0.2)" : "rgba(255,255,255,0.06)",
+                                                background:   m.mine ? "rgba(127,119,221,0.2)" : "rgba(255,255,255,0.06)",
                                                 borderRadius: m.mine ? "9px 0 9px 9px" : "0 9px 9px 9px",
                                                 color: "rgba(255,255,255,0.75)",
                                             }}
@@ -447,8 +367,6 @@ export default function VideoCall() {
                             ))}
                             <div ref={chatEndRef} />
                         </div>
-
-                        {/* Message input */}
                         <div className="flex-shrink-0 p-3 flex gap-2" style={{ borderTop: "0.5px solid rgba(255,255,255,0.07)" }}>
                             <input
                                 type="text"
@@ -459,46 +377,25 @@ export default function VideoCall() {
                                 className="flex-1 rounded-lg px-3 py-2 text-xs text-white outline-none"
                                 style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
                             />
-                            <button
-                                onClick={sendMessage}
-                                aria-label="Send message"
-                                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                                style={{ background: "rgba(127,119,221,0.2)", border: "none", cursor: "pointer" }}
-                            >
+                            <button onClick={sendMessage} aria-label="Send message" className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "rgba(127,119,221,0.2)", border: "none", cursor: "pointer" }}>
                                 <i className="ti ti-send" aria-hidden="true" style={{ fontSize: "14px", color: "#AFA9EC" }} />
                             </button>
                         </div>
                     </>
                 )}
 
-                {/* ── People tab ── */}
                 {panelTab === "people" && (
                     <div className="flex-1 overflow-y-auto p-3">
                         {PARTICIPANTS.map(p => (
-                            <div
-                                key={p.id}
-                                className="flex items-center gap-2.5 p-2.5 rounded-xl mb-2"
-                                style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.05)" }}
-                            >
-                                <div
-                                    className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0"
-                                    style={{ background: p.bg }}
-                                >
-                                    {p.initials}
-                                </div>
+                            <div key={p.id} className="flex items-center gap-2.5 p-2.5 rounded-xl mb-2" style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.05)" }}>
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0" style={{ background: p.bg }}>{p.initials}</div>
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-xs font-medium truncate" style={{ color: "rgba(255,255,255,0.7)" }}>
-                                        {p.name}
-                                    </div>
+                                    <div className="text-xs font-medium truncate" style={{ color: "rgba(255,255,255,0.7)" }}>{p.name}</div>
                                     <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>{p.role}</div>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                    {p.muted && (
-                                        <i className="ti ti-microphone-off" aria-hidden="true" style={{ fontSize: "13px", color: "#E86C6B" }} />
-                                    )}
-                                    {p.speaking && (
-                                        <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#1D9E75" }} />
-                                    )}
+                                    {p.muted    && <i className="ti ti-microphone-off" aria-hidden="true" style={{ fontSize: "13px", color: "#E86C6B" }} />}
+                                    {p.speaking && <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#1D9E75" }} />}
                                 </div>
                             </div>
                         ))}
@@ -506,13 +403,8 @@ export default function VideoCall() {
                 )}
             </div>
 
-            {/* Click outside panel to close */}
             {panelTab && (
-                <div
-                    className="absolute inset-0 z-10"
-                    onClick={() => setPanelTab(null)}
-                    style={{ right: "260px" }}
-                />
+                <div className="absolute inset-0 z-10" onClick={() => setPanelTab(null)} style={{ right: "260px" }} />
             )}
         </div>
     );

@@ -5,12 +5,12 @@ import { register } from "../config/authService.jsx";
 function Signup() {
     const navigate = useNavigate();
 
-    const [role, setRole] = useState("student");
+    const [role, setRole]             = useState("student");
     const [passStrength, setPassStrength] = useState(0);
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [error, setError] = useState("");
+    const [name, setName]             = useState("");
+    const [email, setEmail]           = useState("");
+    const [password, setPassword]     = useState("");
+    const [error, setError]           = useState("");
 
     const handlePassword = (e) => {
         setPassword(e.target.value);
@@ -26,18 +26,18 @@ function Signup() {
         try {
             const res = await register({ name, email, password, role });
 
-            // Save token
+            // Save token using correct key
             localStorage.setItem("upgradex_token", res.data.token);
 
-            // Save user info including role
+            // Save full user object
             localStorage.setItem("upgradex_user", JSON.stringify(res.data.user));
 
-            // Redirect based on role
-            // if (res.data.user.role === "instructor") {
-                navigate("/");
-            // } else {
-            //     navigate("/dashboard");
-            // }
+            // Redirect based on role from backend response
+            if (res.data.user.role === "instructor") {
+                navigate("/instructor/dashboard");
+            } else {
+                navigate("/dashboard");
+            }
 
         } catch (error) {
             setError(error.response?.data?.message || "Registration Failed!");
@@ -91,7 +91,7 @@ function Signup() {
                     {/* Role Picker */}
                     <div className="grid grid-cols-2 gap-2 mb-5">
                         {[
-                            { key: "student", label: "🎓 Student" },
+                            { key: "student",    label: "🎓 Student"      },
                             { key: "instructor", label: "👨‍🏫 Instructor" },
                         ].map(r => (
                             <button type="button" key={r.key} onClick={() => setRole(r.key)}
@@ -109,7 +109,6 @@ function Signup() {
 
                     {/* Fields */}
                     <div className="space-y-4">
-                        {/* ✅ Name input with onChange */}
                         <div className="relative">
                             <input type="text" id="name" placeholder=" " required
                                 value={name}
@@ -128,7 +127,6 @@ function Signup() {
                             </label>
                         </div>
 
-                        {/* ✅ Email input with onChange */}
                         <div className="relative">
                             <input type="email" id="email" placeholder=" " required
                                 value={email}
@@ -147,7 +145,6 @@ function Signup() {
                             </label>
                         </div>
 
-                        {/* ✅ Password with single onChange handling both state and strength */}
                         <div className="relative">
                             <input type="password" value={password} id="password"
                                 onChange={handlePassword}
@@ -172,7 +169,6 @@ function Signup() {
                         </div>
                     </div>
 
-                    {/* ✅ Show error if registration fails */}
                     {error && <p className="text-xs mt-3 text-center" style={{ color: "#E24B4A" }}>{error}</p>}
 
                     <button type="submit" className="w-full py-3 rounded-xl font-semibold text-sm text-white mt-5 transition-all hover:-translate-y-0.5"

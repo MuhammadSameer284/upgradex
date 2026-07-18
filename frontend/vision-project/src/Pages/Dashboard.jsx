@@ -1,83 +1,63 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../Context/authContext.jsx";
 
 const stats = [
-    { label: "Active projects", value: 3, icon: "ti-folder", color: "#7F77DD", bg: "rgba(127,119,221,0.12)", change: "+1 new", changeBg: "rgba(29,158,117,0.12)", changeColor: "#5DCAA5" },
-    { label: "Total tasks", value: 12, icon: "ti-checklist", color: "#1D9E75", bg: "rgba(29,158,117,0.12)", change: "7 left", changeBg: "rgba(186,117,23,0.12)", changeColor: "#EF9F27" },
-    { label: "Code reviews", value: 2, icon: "ti-code", color: "#AFA9EC", bg: "rgba(83,74,183,0.12)", change: "2 open", changeBg: "rgba(224,75,74,0.1)", changeColor: "#E24B4A" },
-    { label: "Portfolio items", value: 1, icon: "ti-briefcase", color: "#5DCAA5", bg: "rgba(93,202,165,0.1)", change: "1 done", changeBg: "rgba(29,158,117,0.12)", changeColor: "#5DCAA5" },
+    { label: "Active projects", value: 3,  icon: "ti-folder",    color: "#7F77DD", bg: "rgba(127,119,221,0.12)", change: "+1 new", changeBg: "rgba(29,158,117,0.12)",  changeColor: "#5DCAA5"  },
+    { label: "Total tasks",     value: 12, icon: "ti-checklist", color: "#1D9E75", bg: "rgba(29,158,117,0.12)",  change: "7 left", changeBg: "rgba(186,117,23,0.12)",   changeColor: "#EF9F27"  },
+    { label: "Code reviews",    value: 2,  icon: "ti-code",      color: "#AFA9EC", bg: "rgba(83,74,183,0.12)",   change: "2 open", changeBg: "rgba(224,75,74,0.1)",     changeColor: "#E24B4A"  },
+    { label: "Portfolio items", value: 1,  icon: "ti-briefcase", color: "#5DCAA5", bg: "rgba(93,202,165,0.1)",   change: "1 done", changeBg: "rgba(29,158,117,0.12)",   changeColor: "#5DCAA5"  },
 ];
 
 const projects = [
-    { initials: "EC", name: "E-Commerce Platform", meta: "4 members · Updated 2h ago", progress: 65, gradientFrom: "#534AB7", gradientTo: "#7F77DD", barColor: "#7F77DD", status: "Active", statusBg: "rgba(29,158,117,0.12)", statusColor: "#5DCAA5" },
-    { initials: "SP", name: "Student Portal API", meta: "2 members · Updated 5h ago", progress: 40, gradientFrom: "#0F6E56", gradientTo: "#1D9E75", barColor: "#1D9E75", status: "Active", statusBg: "rgba(29,158,117,0.12)", statusColor: "#5DCAA5" },
-    { initials: "WA", name: "Weather App", meta: "Solo · Updated yesterday", progress: 90, gradientFrom: "#712B13", gradientTo: "#D85A30", barColor: "#D85A30", status: "Review", statusBg: "rgba(127,119,221,0.12)", statusColor: "#AFA9EC" },
+    { initials: "EC", name: "E-Commerce Platform", meta: "4 members · Updated 2h ago",  progress: 65, gradientFrom: "#534AB7", gradientTo: "#7F77DD", barColor: "#7F77DD", status: "Active", statusBg: "rgba(29,158,117,0.12)",  statusColor: "#5DCAA5"  },
+    { initials: "SP", name: "Student Portal API",  meta: "2 members · Updated 5h ago",  progress: 40, gradientFrom: "#0F6E56", gradientTo: "#1D9E75", barColor: "#1D9E75", status: "Active", statusBg: "rgba(29,158,117,0.12)",  statusColor: "#5DCAA5"  },
+    { initials: "WA", name: "Weather App",         meta: "Solo · Updated yesterday",    progress: 90, gradientFrom: "#712B13", gradientTo: "#D85A30", barColor: "#D85A30", status: "Review", statusBg: "rgba(127,119,221,0.12)", statusColor: "#AFA9EC" },
 ];
 
 const initialTasks = [
-    { id: 1, name: "Setup Express server", done: true, tag: "Done", tagBg: "rgba(29,158,117,0.1)", tagColor: "#5DCAA5" },
-    { id: 2, name: "Build auth middleware", done: false, tag: "In progress", tagBg: "rgba(186,117,23,0.1)", tagColor: "#EF9F27" },
-    { id: 3, name: "Design product schema", done: false, tag: "Todo", tagBg: "rgba(255,255,255,0.05)", tagColor: "rgba(255,255,255,0.25)" },
-    { id: 4, name: "Connect MongoDB Atlas", done: false, tag: "Todo", tagBg: "rgba(255,255,255,0.05)", tagColor: "rgba(255,255,255,0.25)" },
-    { id: 5, name: "Write API documentation", done: false, tag: "Todo", tagBg: "rgba(255,255,255,0.05)", tagColor: "rgba(255,255,255,0.25)" },
+    { id: 1, name: "Setup Express server",    done: true,  tag: "Done",        tagBg: "rgba(29,158,117,0.1)",   tagColor: "#5DCAA5"               },
+    { id: 2, name: "Build auth middleware",   done: false, tag: "In progress", tagBg: "rgba(186,117,23,0.1)",   tagColor: "#EF9F27"               },
+    { id: 3, name: "Design product schema",   done: false, tag: "Todo",        tagBg: "rgba(255,255,255,0.05)", tagColor: "rgba(255,255,255,0.25)" },
+    { id: 4, name: "Connect MongoDB Atlas",   done: false, tag: "Todo",        tagBg: "rgba(255,255,255,0.05)", tagColor: "rgba(255,255,255,0.25)" },
+    { id: 5, name: "Write API documentation", done: false, tag: "Todo",        tagBg: "rgba(255,255,255,0.05)", tagColor: "rgba(255,255,255,0.25)" },
 ];
 
 const activity = [
-    { icon: "ti-git-pull-request", iconColor: "#7F77DD", iconBg: "rgba(127,119,221,0.12)", text: <><strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>Sir Khalid</strong> left a review comment on <strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>E-Commerce Platform</strong> — "Clean up the auth controller"</>, time: "12m ago" },
-    { icon: "ti-user-plus", iconColor: "#1D9E75", iconBg: "rgba(29,158,117,0.12)", text: <><strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>Ali Raza</strong> joined your project <strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>Student Portal API</strong></>, time: "1h ago" },
-    { icon: "ti-checklist", iconColor: "#D85A30", iconBg: "rgba(216,90,48,0.1)", text: <><strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>You</strong> moved <strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>"Setup Express server"</strong> to Done in Weather App</>, time: "3h ago" },
-    { icon: "ti-video", iconColor: "#5DCAA5", iconBg: "rgba(93,202,165,0.1)", text: <><strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>Sir Khalid</strong> scheduled a video call for <strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>E-Commerce Project</strong> review</>, time: "5h ago" },
+    { icon: "ti-git-pull-request", iconColor: "#7F77DD", iconBg: "rgba(127,119,221,0.12)", text: <><strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>Sir Khalid</strong> left a review comment on <strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>E-Commerce Platform</strong></>,          time: "12m ago" },
+    { icon: "ti-user-plus",        iconColor: "#1D9E75", iconBg: "rgba(29,158,117,0.12)",  text: <><strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>Ali Raza</strong> joined your project <strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>Student Portal API</strong></>,                        time: "1h ago"  },
+    { icon: "ti-checklist",        iconColor: "#D85A30", iconBg: "rgba(216,90,48,0.1)",    text: <><strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>You</strong> moved <strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>"Setup Express server"</strong> to Done in Weather App</>,               time: "3h ago"  },
+    { icon: "ti-video",            iconColor: "#5DCAA5", iconBg: "rgba(93,202,165,0.1)",   text: <><strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>Sir Khalid</strong> scheduled a video call for <strong style={{ color: "rgba(255,255,255,0.65)", fontWeight: 500 }}>E-Commerce Project</strong> review</>,       time: "5h ago"  },
 ];
 
 export default function Dashboard() {
-    const [tasks, setTasks] = useState(initialTasks);
+    const [tasks,     setTasks]     = useState(initialTasks);
     const [showModal, setShowModal] = useState(false);
-    const [mName, setMName] = useState("");
-    const [mDesc, setMDesc] = useState("");
-    const [mTech, setMTech] = useState("");
-    const navigate = useNavigate();
+    const [mName,     setMName]     = useState("");
+    const [mDesc,     setMDesc]     = useState("");
+    const [mTech,     setMTech]     = useState("");
+    const { user }                  = useAuth();
+    const navigate                  = useNavigate();
 
     const toggleTask = (id) => {
         setTasks(prev => prev.map(t => {
             if (t.id !== id) return t;
             const done = !t.done;
             return {
-                ...t,
-                done,
-                tag: done ? "Done" : "Todo",
-                tagBg: done ? "rgba(29,158,117,0.1)" : "rgba(255,255,255,0.05)",
-                tagColor: done ? "#5DCAA5" : "rgba(255,255,255,0.25)",
+                ...t, done,
+                tag:      done ? "Done" : "Todo",
+                tagBg:    done ? "rgba(29,158,117,0.1)"   : "rgba(255,255,255,0.05)",
+                tagColor: done ? "#5DCAA5"                : "rgba(255,255,255,0.25)",
             };
         }));
-    };
-
-    // ── Create project ─────────────────────────────────────────────
-    const handleCreate = () => {
-        if (!mName.trim()) return;
-        const tech = mTech.split(",").map(t => t.trim()).filter(Boolean);
-        const [gradFrom, gradTo] = gradPool[idCounter % gradPool.length];
-        const newProject = {
-            id: idCounter,
-            initials: mName.slice(0, 2).toUpperCase(),
-            name: mName.trim(),
-            desc: mDesc.trim() || "New project",
-            tech: tech.length ? tech : ["React"],
-            progress: 0,
-            status: "active",
-            members: [{ initials: "MS", bg: "linear-gradient(135deg,#534AB7,#7F77DD)" }],
-            gradFrom, gradTo, barColor: gradTo,
-            updated: "Just now",
-            tasks: 0,
-        };
-        setProjects(prev => [newProject, ...prev]);
-        setIdCounter(c => c + 1);
-        setMName(""); setMDesc(""); setMTech("");
-        setShowModal(false);
     };
 
     const today = new Date().toLocaleDateString("en-US", {
         weekday: "long", year: "numeric", month: "long", day: "numeric",
     });
+
+    // Get first name from logged-in user, fallback to "there"
+    const firstName = user?.name?.split(" ")[0] || "there";
 
     return (
         <div className="min-h-screen p-6" style={{ background: "#0a0a14" }}>
@@ -89,12 +69,11 @@ export default function Dashboard() {
                         {today}
                     </div>
                     <h1 className="text-xl font-semibold text-white">
-                        Good morning, <span style={{ color: "#7F77DD" }}>Sameer</span> 👋
+                        Good morning, <span style={{ color: "#7F77DD" }}>{firstName}</span> 👋
                     </h1>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {/* Search */}
                     <div
                         className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all"
                         style={{ background: "rgba(255,255,255,0.04)", border: "0.5px solid rgba(255,255,255,0.08)" }}
@@ -105,13 +84,8 @@ export default function Dashboard() {
                         <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)" }}>Search anything...</span>
                     </div>
 
-                    {/* New Project */}
                     <button
-                        // onClick={() => setShowModal(true)}
-                        onClick={() => {
-                            console.log("Button clicked");
-                            setShowModal(true);
-                        }}
+                        onClick={() => navigate("/projects")}
                         className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-xs font-medium transition-all hover:opacity-90"
                         style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
                     >
@@ -143,6 +117,7 @@ export default function Dashboard() {
                     </div>
                 </div>
                 <button
+                    onClick={() => navigate("/video")}
                     className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all hover:opacity-80"
                     style={{ background: "rgba(127,119,221,0.3)", border: "none", cursor: "pointer" }}
                 >
@@ -158,7 +133,7 @@ export default function Dashboard() {
                         className="rounded-xl p-4 cursor-pointer transition-all"
                         style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(127,119,221,0.25)"; e.currentTarget.style.background = "rgba(127,119,221,0.04)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";  e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
                     >
                         <div className="flex items-center justify-between mb-3">
                             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: s.bg }}>
@@ -230,7 +205,7 @@ export default function Dashboard() {
                                 className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 mt-0.5 transition-all"
                                 style={{
                                     background: t.done ? "rgba(29,158,117,0.2)" : "transparent",
-                                    border: t.done ? "0.5px solid rgba(29,158,117,0.4)" : "0.5px solid rgba(255,255,255,0.15)",
+                                    border:     t.done ? "0.5px solid rgba(29,158,117,0.4)" : "0.5px solid rgba(255,255,255,0.15)",
                                     cursor: "pointer",
                                 }}
                                 aria-label={t.done ? "Mark incomplete" : "Mark complete"}
@@ -240,7 +215,7 @@ export default function Dashboard() {
                             <span
                                 className="text-xs flex-1"
                                 style={{
-                                    color: t.done ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.6)",
+                                    color:          t.done ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.6)",
                                     textDecoration: t.done ? "line-through" : "none",
                                     lineHeight: 1.4,
                                 }}
@@ -277,64 +252,7 @@ export default function Dashboard() {
                         </div>
                     </div>
                 ))}
-
             </div>
-
-            {/* ── Create Project Modal ── */}
-            {showModal && (
-                <div
-                    className="fixed inset-0 flex items-center justify-center z-50"
-                    style={{ background: "rgba(0,0,0,0.65)" }}
-                    onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}
-                >
-                    <div
-                        className="w-80 rounded-2xl p-5"
-                        style={{ background: "#12121f", border: "0.5px solid rgba(255,255,255,0.1)" }}
-                    >
-                        <h2 className="text-sm font-medium text-white mb-4">Create new project</h2>
-
-                        {[
-                            { label: "Project name", val: mName, set: setMName, placeholder: "e.g. Student Portal" },
-                            { label: "Description", val: mDesc, set: setMDesc, placeholder: "Short description..." },
-                            { label: "Tech stack (comma separated)", val: mTech, set: setMTech, placeholder: "React, Node.js, MongoDB" },
-                        ].map(f => (
-                            <div key={f.label}>
-                                <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                                    {f.label}
-                                </label>
-                                <input
-                                    type="text"
-                                    value={f.val}
-                                    onChange={e => f.set(e.target.value)}
-                                    onKeyDown={e => e.key === "Enter" && handleCreate()}
-                                    placeholder={f.placeholder}
-                                    className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none mb-3"
-                                    style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
-                                />
-                            </div>
-                        ))}
-
-                        <div className="grid grid-cols-2 gap-2 mt-1">
-                            <button
-                                type="button"
-                                onClick={() => setShowModal(false)}
-                                className="py-2 rounded-lg text-xs font-medium transition-all"
-                                style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "none", cursor: "pointer" }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleCreate}
-                                className="py-2 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90"
-                                style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
-                            >
-                                Create
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
         </div>
     );

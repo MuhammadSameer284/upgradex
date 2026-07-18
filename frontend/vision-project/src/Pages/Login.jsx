@@ -4,28 +4,28 @@ import { login } from "../config/authService.jsx";
 
 function Login() {
     const navigate = useNavigate();
-    const [role, setRole] = useState("student");
-    const [email, setEmail] = useState("");
+    const [role, setRole]       = useState("student");
+    const [email, setEmail]     = useState("");
     const [password, setPassword] = useState("");
-    const [error, setError] = useState("");
+    const [error, setError]     = useState("");
 
     const handleLogin = async (e) => {
         e.preventDefault();
         try {
             const res = await login({ email, password });
 
-            // Save token
+            // Save token using correct key
             localStorage.setItem("upgradex_token", res.data.token);
 
-            // Save user info including role
+            // Save full user object
             localStorage.setItem("upgradex_user", JSON.stringify(res.data.user));
 
-            // Redirect based on role
-            // if (res.data.user.role === "instructor") {
-            //     navigate("/instructor/dashboard");
-            // } else {
-                navigate("/");
-            // }
+            // Redirect based on role from backend
+            if (res.data.user.role === "instructor") {
+                navigate("/instructor/dashboard");
+            } else {
+                navigate("/dashboard");
+            }
 
         } catch (error) {
             setError(error.response?.data?.message || "Login Failed!");
@@ -84,7 +84,7 @@ function Login() {
                         Sign in to your workspace
                     </p>
 
-                    {/* Role Toggle — ✅ type="button" added */}
+                    {/* Role Toggle */}
                     <div className="flex rounded-full p-1 mb-5" style={{ background: "rgba(255,255,255,0.05)" }}>
                         {["student", "instructor"].map(r => (
                             <button type="button" key={r} onClick={() => setRole(r)}
@@ -99,7 +99,7 @@ function Login() {
                         ))}
                     </div>
 
-                    {/* Fields — ✅ split into separate inputs, add value/onChange yourself */}
+                    {/* Fields */}
                     <div className="space-y-4">
                         <div className="relative">
                             <input
@@ -146,7 +146,6 @@ function Login() {
                         </div>
                     </div>
 
-                    {/* ✅ Error message display */}
                     {error && <p className="text-xs mt-3 text-center" style={{ color: "#E24B4A" }}>{error}</p>}
 
                     <a className="block text-right text-xs mt-2 mb-4 cursor-pointer"
@@ -154,30 +153,10 @@ function Login() {
                         Forgot password?
                     </a>
 
-                    {/* ✅ type="submit" added */}
                     <button type="submit" className="w-full py-3 rounded-xl font-semibold text-sm text-white relative overflow-hidden transition-all hover:-translate-y-0.5"
                         style={{ background: "linear-gradient(135deg,#7F77DD 0%,#1D9E75 100%)", border: "none", cursor: "pointer" }}>
                         Sign In →
                     </button>
-
-                    {/* <div className="flex items-center gap-3 my-4">
-                        <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-                        <span className="text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>or continue with</span>
-                        <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-                    </div> */}
-
-                    {/* <div className="grid grid-cols-2 gap-2">
-                        {["Google", "GitHub"].map(p => (
-                            <button type="button" key={p} className="py-2 rounded-xl text-xs transition-all"
-                                style={{
-                                    background: "rgba(255,255,255,0.04)",
-                                    border: "0.5px solid rgba(255,255,255,0.1)",
-                                    color: "rgba(255,255,255,0.5)", cursor: "pointer",
-                                }}>
-                                {p === "Google" ? "G" : "⌥"} {p}
-                            </button>
-                        ))}
-                    </div> */}
 
                     <p className="text-center text-xs mt-5" style={{ color: "rgba(255,255,255,0.3)" }}>
                         New to UpgradeX?{" "}

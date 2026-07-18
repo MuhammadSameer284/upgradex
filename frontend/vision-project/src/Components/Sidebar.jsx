@@ -5,7 +5,6 @@ import { useAuth } from "../Context/authContext.jsx";
 function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
     const { user, logout } = useAuth();
-
     const navigate = useNavigate();
 
     const handleLogout = () => {
@@ -17,24 +16,24 @@ function Sidebar() {
         {
             label: "MAIN",
             items: [
-                { path: "/dashboard", label: "Dashboard", icon: "ti-layout-dashboard", badge: null },
-                { path: "/projects", label: "Projects", icon: "ti-folder", badge: "3" },
-                { path: "/tasks", label: "Tasks", icon: "ti-checklist", badge: "7" },
+                { path: "/dashboard", label: "Dashboard",    icon: "ti-layout-dashboard", badge: null },
+                { path: "/projects",  label: "Projects",     icon: "ti-folder",           badge: "3"  },
+                { path: "/tasks",     label: "Tasks",        icon: "ti-checklist",        badge: "7"  },
             ],
         },
         {
             label: "COLLABORATE",
             items: [
-                { path: "/review", label: "Code Review", icon: "ti-code", badge: null },
-                { path: "/kanban", label: "Kanban Board", icon: "ti-layout-kanban", badge: null },
-                { path: "/video", label: "Video Calls", icon: "ti-video", badge: null },
+                { path: "/review",    label: "Code Review",  icon: "ti-code",             badge: null },
+                { path: "/kanban",    label: "Kanban Board", icon: "ti-layout-kanban",    badge: null },
+                { path: "/video",     label: "Video Calls",  icon: "ti-video",            badge: null },
             ],
         },
         {
             label: "MY SPACE",
             items: [
-                { path: "/portfolio", label: "Portfolio", icon: "ti-briefcase", badge: null },
-                { path: "/settings", label: "Settings", icon: "ti-settings", badge: null },
+                { path: "/portfolio", label: "Portfolio",    icon: "ti-briefcase",        badge: null },
+                { path: "/settings",  label: "Settings",     icon: "ti-settings",         badge: null },
             ],
         },
     ];
@@ -43,23 +42,23 @@ function Sidebar() {
         {
             label: "MAIN",
             items: [
-                { path: "/instructor/dashboard", label: "Dashboard", icon: "ti-layout-dashboard", badge: null },
-                { path: "/projects", label: "All Projects", icon: "ti-folder", badge: null },
+                { path: "/instructor/dashboard", label: "Dashboard",      icon: "ti-layout-dashboard", badge: null },
+                { path: "/projects",             label: "All Projects",   icon: "ti-folder",           badge: null },
             ],
         },
         {
             label: "MANAGE",
             items: [
-                { path: "/review", label: "Code Reviews", icon: "ti-code", badge: "2" },
-                { path: "/kanban", label: "Kanban Board", icon: "ti-layout-kanban", badge: null },
-                { path: "/video", label: "Video Calls", icon: "ti-video", badge: null },
+                { path: "/review",               label: "Code Reviews",   icon: "ti-code",             badge: "2"  },
+                { path: "/kanban",               label: "Kanban Board",   icon: "ti-layout-kanban",    badge: null },
+                { path: "/video",                label: "Video Calls",    icon: "ti-video",            badge: null },
             ],
         },
         {
             label: "STUDENTS",
             items: [
-                { path: "/portfolio", label: "All Portfolios", icon: "ti-briefcase", badge: null },
-                { path: "/settings", label: "Settings", icon: "ti-settings", badge: null },
+                { path: "/portfolio",            label: "All Portfolios", icon: "ti-briefcase",        badge: null },
+                { path: "/settings",             label: "Settings",       icon: "ti-settings",         badge: null },
             ],
         },
     ];
@@ -68,41 +67,81 @@ function Sidebar() {
 
     return (
         <aside
-            className="flex flex-col h-screen sticky top-0 flex-shrink-0 transition-all duration-300 z-40"
             style={{
                 width: collapsed ? "58px" : "220px",
+                minWidth: collapsed ? "58px" : "220px",
                 background: "#0d0d1a",
                 borderRight: "0.5px solid rgba(255,255,255,0.07)",
+                display: "flex",
+                flexDirection: "column",
+                height: "100vh",
+                position: "sticky",
+                top: 0,
+                flexShrink: 0,
+                transition: "width 0.3s ease, min-width 0.3s ease",
+                zIndex: 40,
+                overflow: "hidden", // ← key fix: hides scrollbar
             }}
         >
             {/* ── Logo ── */}
             <div
-                className="flex items-center gap-2.5 px-3 py-4 overflow-hidden flex-shrink-0"
-                style={{ borderBottom: "0.5px solid rgba(255,255,255,0.06)" }}
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "16px 12px",
+                    borderBottom: "0.5px solid rgba(255,255,255,0.06)",
+                    flexShrink: 0,
+                    overflow: "hidden",
+                }}
             >
                 <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                    style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)" }}
+                    style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "9px",
+                        background: "linear-gradient(135deg,#7F77DD,#1D9E75)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        color: "#fff",
+                        flexShrink: 0,
+                    }}
                 >
                     UX
                 </div>
 
                 {!collapsed && (
-                    <span className="text-white font-semibold text-sm tracking-tight whitespace-nowrap">
+                    <span style={{
+                        color: "#fff",
+                        fontWeight: "600",
+                        fontSize: "14px",
+                        letterSpacing: "-0.3px",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                    }}>
                         Upgrade<span style={{ color: "#7F77DD" }}>X</span>
                     </span>
                 )}
 
                 <button
                     onClick={() => setCollapsed(!collapsed)}
-                    className="flex items-center justify-center w-6 h-6 rounded-md transition-all flex-shrink-0"
+                    aria-label="Toggle sidebar"
                     style={{
                         marginLeft: collapsed ? "0" : "auto",
+                        width: "24px",
+                        height: "24px",
+                        borderRadius: "6px",
                         background: "rgba(255,255,255,0.04)",
                         border: "0.5px solid rgba(255,255,255,0.08)",
                         cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
                     }}
-                    aria-label="Toggle sidebar"
                 >
                     <i
                         className="ti ti-chevrons-left"
@@ -119,14 +158,22 @@ function Sidebar() {
             </div>
 
             {/* ── Nav Sections ── */}
-            <div className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
+            <div style={{
+                flex: 1,
+                overflowY: "auto",
+                overflowX: "hidden",
+                padding: "8px",
+            }}>
                 {navSections.map((section, si) => (
                     <div key={si}>
+                        {/* Section label — only when expanded */}
                         {!collapsed && (
-                            <div
-                                className="text-[10px] px-2 py-1 tracking-widest"
-                                style={{ color: "rgba(255,255,255,0.2)" }}
-                            >
+                            <div style={{
+                                fontSize: "10px",
+                                color: "rgba(255,255,255,0.2)",
+                                padding: "4px 8px",
+                                letterSpacing: "0.07em",
+                            }}>
                                 {section.label}
                             </div>
                         )}
@@ -136,132 +183,200 @@ function Sidebar() {
                                 key={item.path}
                                 to={item.path}
                                 title={collapsed ? item.label : ""}
+                                style={{ textDecoration: "none", display: "block", marginBottom: "2px" }}
                                 className={({ isActive }) =>
-                                    `group relative flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg transition-all no-underline mb-0.5 ${isActive
-                                        ? "bg-[rgba(127,119,221,0.12)]"
-                                        : "hover:bg-[rgba(255,255,255,0.05)]"
-                                    }`
+                                    `group relative ${isActive ? "nav-active" : "nav-inactive"}`
                                 }
                             >
                                 {({ isActive }) => (
-                                    <>
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "10px",
+                                            padding: "8px 10px",
+                                            borderRadius: "9px",
+                                            background: isActive ? "rgba(127,119,221,0.12)" : "transparent",
+                                            transition: "background 0.15s",
+                                            position: "relative",
+                                            overflow: "hidden",
+                                            cursor: "pointer",
+                                        }}
+                                        onMouseEnter={e => {
+                                            if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                                        }}
+                                        onMouseLeave={e => {
+                                            if (!isActive) e.currentTarget.style.background = "transparent";
+                                        }}
+                                    >
+                                        {/* Icon */}
                                         <i
-                                            className={`ti ${item.icon} flex-shrink-0`}
+                                            className={`ti ${item.icon}`}
                                             aria-hidden="true"
                                             style={{
                                                 fontSize: "18px",
                                                 color: isActive ? "#AFA9EC" : "rgba(255,255,255,0.35)",
+                                                flexShrink: 0,
+                                                width: "18px",
                                             }}
                                         />
 
+                                        {/* Label + badge — only when expanded */}
                                         {!collapsed && (
                                             <>
-                                                <span
-                                                    className="text-xs flex-1 whitespace-nowrap"
-                                                    style={{
-                                                        color: isActive ? "#AFA9EC" : "rgba(255,255,255,0.45)",
-                                                        fontWeight: isActive ? "500" : "400",
-                                                    }}
-                                                >
+                                                <span style={{
+                                                    fontSize: "12px",
+                                                    color: isActive ? "#AFA9EC" : "rgba(255,255,255,0.45)",
+                                                    fontWeight: isActive ? "500" : "400",
+                                                    flex: 1,
+                                                    whiteSpace: "nowrap",
+                                                    overflow: "hidden",
+                                                }}>
                                                     {item.label}
                                                 </span>
 
                                                 {item.badge && (
-                                                    <span
-                                                        className="text-[10px] px-1.5 py-0.5 rounded-full"
-                                                        style={{
-                                                            background: "rgba(127,119,221,0.2)",
-                                                            color: "#AFA9EC",
-                                                        }}
-                                                    >
+                                                    <span style={{
+                                                        fontSize: "10px",
+                                                        padding: "1px 6px",
+                                                        borderRadius: "99px",
+                                                        background: "rgba(127,119,221,0.2)",
+                                                        color: "#AFA9EC",
+                                                        flexShrink: 0,
+                                                    }}>
                                                         {item.badge}
                                                     </span>
                                                 )}
                                             </>
                                         )}
 
+                                        {/* Tooltip — only when collapsed */}
                                         {collapsed && (
                                             <div
-                                                className="absolute left-full ml-2.5 px-2 py-1 rounded-md text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50"
+                                                className="group-hover:opacity-100"
                                                 style={{
+                                                    position: "absolute",
+                                                    left: "calc(100% + 10px)",
+                                                    top: "50%",
+                                                    transform: "translateY(-50%)",
                                                     background: "#1a1a2e",
                                                     border: "0.5px solid rgba(255,255,255,0.1)",
                                                     color: "rgba(255,255,255,0.7)",
-                                                    top: "50%",
-                                                    transform: "translateY(-50%)",
+                                                    fontSize: "11px",
+                                                    padding: "4px 8px",
+                                                    borderRadius: "6px",
+                                                    whiteSpace: "nowrap",
+                                                    pointerEvents: "none",
+                                                    opacity: 0,
+                                                    transition: "opacity 0.15s",
+                                                    zIndex: 50,
                                                 }}
                                             >
                                                 {item.label}
                                             </div>
                                         )}
-                                    </>
+                                    </div>
                                 )}
                             </NavLink>
                         ))}
 
+                        {/* Divider between sections */}
                         {si < navSections.length - 1 && (
-                            <div
-                                className="my-2 mx-1"
-                                style={{ height: "0.5px", background: "rgba(255,255,255,0.06)" }}
-                            />
+                            <div style={{
+                                height: "0.5px",
+                                background: "rgba(255,255,255,0.06)",
+                                margin: "8px 4px",
+                            }} />
                         )}
                     </div>
                 ))}
             </div>
 
             {/* ── Bottom: User + Logout ── */}
-            <div
-                className="flex-shrink-0 p-2"
-                style={{ borderTop: "0.5px solid rgba(255,255,255,0.06)" }}
-            >
-                {/* User info button */}
+            <div style={{
+                flexShrink: 0,
+                padding: "8px",
+                borderTop: "0.5px solid rgba(255,255,255,0.06)",
+            }}>
+                {/* User info */}
                 <button
                     onClick={() => navigate("/profile")}
-                    className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg transition-all overflow-hidden mb-1"
-                    style={{ background: "transparent", border: "none", cursor: "pointer" }}
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        width: "100%",
+                        padding: "8px",
+                        borderRadius: "9px",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        overflow: "hidden",
+                        marginBottom: "4px",
+                        transition: "background 0.15s",
+                    }}
                     onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                 >
-                    <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
-                        style={{ background: "linear-gradient(135deg,#534AB7,#0F6E56)" }}
-                    >
-
+                    <div style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "9px",
+                        background: "linear-gradient(135deg,#534AB7,#0F6E56)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "11px",
+                        fontWeight: "600",
+                        color: "#fff",
+                        flexShrink: 0,
+                    }}>
                         {user?.name
-                            ? user.name
-                                .split(" ")                    // ["Muhammad", "Sameer"]
-                                .filter(word => word.length > 0) // remove empty strings
-                                .map(word => word[0])          // ["M", "S"]
-                                .slice(0, 2)                   // take max 2 letters
-                                .join("")                      // "MS"
-                                .toUpperCase()
+                            ? user.name.split(" ").filter(w => w.length > 0).map(w => w[0]).slice(0, 2).join("").toUpperCase()
                             : "UX"
                         }
                     </div>
 
                     {!collapsed && (
-                        <div className="text-left overflow-hidden flex-1">
-                            <div
-                                className="text-xs font-medium whitespace-nowrap"
-                                style={{ color: "rgba(255,255,255,0.7)" }}
-                            >
+                        <div style={{ textAlign: "left", overflow: "hidden", flex: 1 }}>
+                            <div style={{
+                                fontSize: "12px",
+                                fontWeight: "500",
+                                color: "rgba(255,255,255,0.7)",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                            }}>
                                 {user?.name || "User"}
                             </div>
-                            <div
-                                className="text-[10px] whitespace-nowrap capitalize"
-                                style={{ color: "rgba(255,255,255,0.25)" }}
-                            >
+                            <div style={{
+                                fontSize: "10px",
+                                color: "rgba(255,255,255,0.25)",
+                                whiteSpace: "nowrap",
+                                textTransform: "capitalize",
+                            }}>
                                 {user?.role || "student"}
                             </div>
                         </div>
                     )}
                 </button>
 
-                {/* Logout button */}
+                {/* Logout */}
                 <button
                     onClick={handleLogout}
-                    className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg transition-all"
-                    style={{ background: "transparent", border: "none", cursor: "pointer" }}
+                    title="Logout"
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        width: "100%",
+                        padding: "8px",
+                        borderRadius: "9px",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        transition: "background 0.15s",
+                    }}
                     onMouseEnter={e => {
                         e.currentTarget.style.background = "rgba(224,75,74,0.08)";
                         const icon = e.currentTarget.querySelector("i");
@@ -276,7 +391,6 @@ function Sidebar() {
                         if (icon) icon.style.color = "rgba(255,255,255,0.2)";
                         if (span) span.style.color = "rgba(255,255,255,0.2)";
                     }}
-                    title="Logout"
                 >
                     <i
                         className="ti ti-logout"
@@ -285,13 +399,15 @@ function Sidebar() {
                             fontSize: "18px",
                             color: "rgba(255,255,255,0.2)",
                             flexShrink: 0,
+                            width: "18px",
                         }}
                     />
                     {!collapsed && (
-                        <span
-                            className="text-xs whitespace-nowrap"
-                            style={{ color: "rgba(255,255,255,0.2)" }}
-                        >
+                        <span style={{
+                            fontSize: "12px",
+                            color: "rgba(255,255,255,0.2)",
+                            whiteSpace: "nowrap",
+                        }}>
                             Logout
                         </span>
                     )}
