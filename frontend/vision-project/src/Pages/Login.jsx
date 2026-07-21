@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { login } from "../config/authService.jsx";
+import { login as apiLogin } from "../config/authService.jsx";
+import { useAuth } from "../Context/authContext.jsx";
 
 function Login() {
     const navigate = useNavigate();
+    const { login: loginContext } = useAuth();
     const [role, setRole]       = useState("student");
     const [email, setEmail]     = useState("");
     const [password, setPassword] = useState("");
@@ -12,13 +14,10 @@ function Login() {
     const handleLogin = async (e) => {
         e.preventDefault();
         try {
-            const res = await login({ email, password });
+            const res = await apiLogin({ email, password });
 
-            // Save token using correct key
-            localStorage.setItem("upgradex_token", res.data.token);
-
-            // Save full user object
-            localStorage.setItem("upgradex_user", JSON.stringify(res.data.user));
+            // Save token and user dynamically in context
+            loginContext(res.data.user, res.data.token);
 
             // Redirect based on role from backend
             if (res.data.user.role === "instructor") {

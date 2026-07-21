@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "../Context/authContext.jsx";
+import { getUserProfile, updateUserProfile } from "../config/userService.jsx";
 
 // ─── Toggle Switch Component ─────────────────────────────────────
 function Switch({ on, onClick }) {
@@ -64,13 +66,37 @@ function Section({ title, danger, children }) {
 // ─── Main Settings Page ──────────────────────────────────────────
 export default function Settings() {
     const [activeSection, setActiveSection] = useState("profile");
+    const { user } = useAuth();
+    const isInstructor = user?.role === "instructor";
 
     // Profile form state
-    const [name, setName] = useState("Muhammad Sameer");
-    const [email, setEmail] = useState("sameer@aptech.com");
-    const [bio, setBio] = useState("MERN stack developer studying at Aptech.");
-    const [location, setLocation] = useState("Karachi, Pakistan");
-    const [github, setGithub] = useState("github.com/sameer-ahmed");
+    const [name,     setName]     = useState("");
+    const [email,    setEmail]    = useState("");
+    const [bio,      setBio]      = useState("");
+    const [location, setLocation] = useState("");
+    const [github,   setGithub]   = useState("");
+    const [saving,   setSaving]   = useState(false);
+    const [saved,    setSaved]    = useState(false);
+
+    // Load profile on mount
+    useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                const res = await getUserProfile();
+                const p   = res.data;
+                setName(p.name       || user?.name     || "");
+                setEmail(p.email     || user?.email    || "");
+                setBio(p.bio         || "");
+                setLocation(p.location || "");
+                setGithub(p.github   || "");
+            } catch {
+                // fall back to AuthContext values
+                setName(user?.name  || "");
+                setEmail(user?.email || "");
+            }
+        };
+        fetchProfile();
+    }, [user]);
 
     // Notification toggles
     const [notifs, setNotifs] = useState({
@@ -112,15 +138,30 @@ export default function Settings() {
     ];
 
     const notifItems = [
-        { key: "codeReview", label: "Code review comments", desc: "Get notified when someone comments on your code" },
-        { key: "taskAssign", label: "Task assignments", desc: "Get notified when you're assigned a new task" },
-        { key: "videoCall", label: "Video call invites", desc: "Get notified for upcoming video calls" },
-        { key: "projectUpdates", label: "Project updates", desc: "Updates from projects you're part of" },
-        { key: "emailDigest", label: "Email digest", desc: "Weekly summary of your activity" },
+        { key: "codeReview",      label: "Code review comments",  desc: isInstructor ? "Get notified when a student submits code for review"                : "Get notified when your instructor comments on your code" },
+        { key: "taskAssign",      label: "Task assignments",       desc: isInstructor ? "Get notified when a student creates or updates a task"              : "Get notified when you're assigned a new task"            },
+        { key: "videoCall",       label: "Video call invites",     desc: isInstructor ? "Reminders for sessions you've scheduled"                            : "Get notified for upcoming video calls from your instructor" },
+        { key: "projectUpdates",  label: "Project updates",        desc: isInstructor ? "Updates from projects you've assigned to students"                  : "Updates from projects you're part of"                    },
+        { key: "emailDigest",     label: "Email digest",           desc: "Weekly summary of your activity" },
     ];
 
+    // ── Save profile handler ────────────────────────────────────────
+    const handleSaveProfile = async () => {
+        setSaving(true);
+        setSaved(false);
+        try {
+            await updateUserProfile({ name, bio, location, github });
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2500);
+        } catch (err) {
+            console.error("Failed to save profile:", err);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     // ── Save Button ────────────────────────────────────────────────
-    const SaveRow = ({ label = "Save changes", showCancel = false }) => (
+    const SaveRow = ({ label = "Save changes", showCancel = false, onClick }) => (
         <div className="flex justify-end gap-2">
             {showCancel && (
                 <button
@@ -131,10 +172,12 @@ export default function Settings() {
                 </button>
             )}
             <button
+                onClick={onClick}
+                disabled={saving}
                 className="px-4.5 py-2 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90"
-                style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
+                style={{ background: saved ? "rgba(29,158,117,0.6)" : "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: saving ? "wait" : "pointer" }}
             >
-                {label}
+                {saving ? "Saving…" : saved ? "✓ Saved!" : label}
             </button>
         </div>
     );
@@ -180,9 +223,9 @@ export default function Settings() {
                                 <div className="flex items-center gap-3.5 mb-4">
                                     <div
                                         className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-bold text-white flex-shrink-0"
-                                        style={{ background: "linear-gradient(135deg,#534AB7,#7F77DD)" }}
+                                        style={{ background: isInstructor ? "linear-gradient(135deg,#0F6E56,#1D9E75)" : "linear-gradient(135deg,#534AB7,#7F77DD)" }}
                                     >
-                                        MS
+                                        {name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() || "UX"}
                                     </div>
                                     <div className="flex gap-2">
                                         <button
@@ -204,11 +247,14 @@ export default function Settings() {
                                 <div className="flex flex-col gap-3">
                                     <div className="grid grid-cols-2 gap-3">
                                         <Field label="Full name" value={name} onChange={e => setName(e.target.value)} />
-                                        <Field label="Role" value="Student" disabled />
+                                        <Field label="Role" value={isInstructor ? "Instructor" : "Student"} disabled />
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <Field label="Email" value={email} onChange={e => setEmail(e.target.value)} />
-                                        <Field label="Batch" value="Batch 42" disabled />
+                                        {isInstructor
+                                            ? <Field label="Department" value="Computer Science" disabled />
+                                            : <Field label="Batch" value="Batch 42" disabled />
+                                        }
                                     </div>
                                     <Field label="Bio" value={bio} onChange={e => setBio(e.target.value)} />
                                     <div className="grid grid-cols-2 gap-3">
@@ -218,7 +264,7 @@ export default function Settings() {
                                 </div>
                             </Section>
 
-                            <SaveRow showCancel />
+                            <SaveRow showCancel onClick={handleSaveProfile} />
                         </>
                     )}
 

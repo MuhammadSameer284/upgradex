@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { getProjects, createProject, updateProject } from "../config/projectService.jsx";
+import { useAuth } from "../Context/authContext.jsx";
 
 // ─── Static Data (later this comes from your backend API) ────────
 const initialProjects = [
@@ -93,7 +95,7 @@ const gradPool = [
 ];
 
 // ─── Project Card ────────────────────────────────────────────────
-function ProjectCard({ project, view, onClick }) {
+function ProjectCard({ project, view, onClick, userRole }) {
     const s = statusCfg[project.status];
     const isGrid = view === "grid";
 
@@ -126,12 +128,19 @@ function ProjectCard({ project, view, onClick }) {
                 >
                     {project.initials}
                 </div>
-                <span
-                    className="text-[10px] px-2 py-0.5 rounded-full ml-2"
-                    style={{ background: s.bg, color: s.color }}
-                >
-                    {s.label}
-                </span>
+                <div className="flex items-center">
+                    {project.isShared && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full ml-2" style={{ background: "rgba(127,119,221,0.12)", color: "#AFA9EC" }}>
+                            {userRole === "instructor" ? "Shared" : "📌 Assigned"}
+                        </span>
+                    )}
+                    <span
+                        className="text-[10px] px-2 py-0.5 rounded-full ml-2"
+                        style={{ background: s.bg, color: s.color }}
+                    >
+                        {s.label}
+                    </span>
+                </div>
             </div>
 
             {/* Content */}
@@ -224,19 +233,32 @@ function ProjectCard({ project, view, onClick }) {
 
 // ─── Main Projects Page ──────────────────────────────────────────
 export default function Projects() {
-    const [projects, setProjects] = useState(initialProjects);
+    const { user } = useAuth();
+    const [projects, setProjects] = useState([]);
     const [filter, setFilter] = useState("all");
     const [search, setSearch] = useState("");
     const [view, setView] = useState("grid");
     const [showModal, setShowModal] = useState(false);
-    const [idCounter, setIdCounter] = useState(7);
 
     // Form state
     const [mName, setMName] = useState("");
     const [mDesc, setMDesc] = useState("");
     const [mTech, setMTech] = useState("");
+    const [mShared, setMShared] = useState(false);
 
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const fetchProjects = async () => {
+            try {
+                const res = await getProjects();
+                setProjects(res.data);
+            } catch (err) {
+                console.error("Failed to fetch projects:", err);
+            }
+        };
+        fetchProjects();
+    }, []);
 
     // ── Filter + search ────────────────────────────────────────────
     const visible = projects.filter(p => {
@@ -248,27 +270,22 @@ export default function Projects() {
     });
 
     // ── Create project ─────────────────────────────────────────────
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!mName.trim()) return;
         const tech = mTech.split(",").map(t => t.trim()).filter(Boolean);
-        const [gradFrom, gradTo] = gradPool[idCounter % gradPool.length];
-        const newProject = {
-            id: idCounter,
-            initials: mName.slice(0, 2).toUpperCase(),
-            name: mName.trim(),
-            desc: mDesc.trim() || "New project",
-            tech: tech.length ? tech : ["React"],
-            progress: 0,
-            status: "active",
-            members: [{ initials: "MS", bg: "linear-gradient(135deg,#534AB7,#7F77DD)" }],
-            gradFrom, gradTo, barColor: gradTo,
-            updated: "Just now",
-            tasks: 0,
-        };
-        setProjects(prev => [newProject, ...prev]);
-        setIdCounter(c => c + 1);
-        setMName(""); setMDesc(""); setMTech("");
-        setShowModal(false);
+        try {
+            const res = await createProject({
+                name: mName.trim(),
+                desc: mDesc.trim(),
+                tech: tech.length ? tech : ["React"],
+                ...(user?.role === 'instructor' && { isShared: mShared })
+            });
+            setProjects(prev => [res.data, ...prev]);
+            setMName(""); setMDesc(""); setMTech(""); setMShared(false);
+            setShowModal(false);
+        } catch (err) {
+            console.error("Failed to create project:", err);
+        }
     };
 
     const filters = [
@@ -289,14 +306,16 @@ export default function Projects() {
                         {projects.length} projects · {projects.filter(p => p.status === "active").length} active
                     </p>
                 </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90"
-                    style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
-                >
-                    <i className="ti ti-plus" aria-hidden="true" style={{ fontSize: "14px" }} />
-                    New Project
-                </button>
+                {(!user || user.role === 'instructor' || user.role === 'student') && (
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90"
+                        style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
+                    >
+                        <i className="ti ti-plus" aria-hidden="true" style={{ fontSize: "14px" }} />
+                        {user?.role === 'student' ? 'Add Personal Project' : 'New Project'}
+                    </button>
+                )}
             </div>
 
             {/* ── Toolbar ── */}
@@ -385,10 +404,11 @@ export default function Projects() {
                 >
                     {visible.map(p => (
                         <ProjectCard
-                            key={p.id}
+                            key={p._id}
                             project={p}
                             view={view}
-                            onClick={() => navigate(`/projects/${p.id}`)}
+                            userRole={user?.role}
+                            onClick={() => navigate(`/projects`)}
                         />
                     ))}
                 </div>
@@ -406,6 +426,28 @@ export default function Projects() {
                         style={{ background: "#12121f", border: "0.5px solid rgba(255,255,255,0.1)" }}
                     >
                         <h2 className="text-sm font-medium text-white mb-4">Create new project</h2>
+
+                        {user?.role === 'instructor' && (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>Share with all students</label>
+                            <button
+                              type="button"
+                              onClick={() => setMShared(!mShared)}
+                              style={{
+                                width: '38px', height: '22px', borderRadius: '99px', border: 'none', cursor: 'pointer',
+                                background: mShared ? 'rgba(29,158,117,0.5)' : 'rgba(255,255,255,0.1)',
+                                position: 'relative', flexShrink: 0
+                              }}
+                            >
+                              <div style={{
+                                position: 'absolute', width: '16px', height: '16px', borderRadius: '50%',
+                                top: '3px', left: mShared ? '19px' : '3px',
+                                background: mShared ? '#1D9E75' : '#fff',
+                                transition: 'left 0.2s'
+                              }} />
+                            </button>
+                          </div>
+                        )}
 
                         {[
                             { label: "Project name", val: mName, set: setMName, placeholder: "e.g. Student Portal" },

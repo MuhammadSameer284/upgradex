@@ -2,6 +2,13 @@ import express from 'express'
 import dotenv from 'dotenv'
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import projectRoutes from './routes/projectRoutes.js';
+import taskRoutes from './routes/taskRoutes.js';
+import codeReviewRoutes from './routes/codeReviewRoutes.js';
+import portfolioRoutes from './routes/portfolioRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
+import videoCallRoutes from './routes/videoCallRoutes.js';
 import cors from 'cors';
 
 dotenv.config();
@@ -18,10 +25,150 @@ app.use(cors({
 }));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/projects", projectRoutes);
+app.use("/api/tasks", taskRoutes);
+app.use("/api/reviews", codeReviewRoutes);
+app.use("/api/portfolio", portfolioRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use('/api/calls', videoCallRoutes);
 
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const server = createServer(app);
+
+const io = new Server(server, {
+    cors: {
+        origin: 'http://localhost:5173',
+        methods: ["GET", "POST"],
+        credentials: true
+    }
+});
+
+const hostMap = new Map(); // roomID -> socket.id
+
+io.on('connection', (socket) => {
+    // When a user wants to join a room
+    socket.on('request join', (payload) => {
+        const { roomID, role, name, initials, bg } = payload;
+        
+        if (role === 'instructor') {
+            // Instructor bypasses waiting room
+            hostMap.set(roomID, socket.id);
+            socket.join(roomID);
+            
+            const usersInRoom = [];
+            const room = io.sockets.adapter.rooms.get(roomID);
+            if (room) {
+                for (const clientId of room) {
+                    if (clientId !== socket.id) usersInRoom.push(clientId);
+                }
+            }
+            socket.emit('all users', usersInRoom);
+        } else {
+            // Student must wait for admission
+            const hostSocketId = hostMap.get(roomID);
+            if (hostSocketId) {
+                // Send request to host
+                io.to(hostSocketId).emit('admission request', {
+                    studentId: socket.id,
+                    name,
+                    initials,
+                    bg
+                });
+            } else {
+                // Host is not here yet
+                socket.emit('host missing');
+            }
+        }
+    });
+
+    // Host approves a student
+    socket.on('approve join', (payload) => {
+        const { studentId, roomID } = payload;
+        // The student socket needs to join the room
+        const studentSocket = io.sockets.sockets.get(studentId);
+        if (studentSocket) {
+            studentSocket.join(roomID);
+            studentSocket.emit('admission approved');
+            
+            // Now tell the student who else is in the room so they can P2P
+            const usersInRoom = [];
+            const room = io.sockets.adapter.rooms.get(roomID);
+            if (room) {
+                for (const clientId of room) {
+                    if (clientId !== studentId) usersInRoom.push(clientId);
+                }
+            }
+            studentSocket.emit('all users', usersInRoom);
+        }
+    });
+
+    // Host denies a student
+    socket.on('deny join', (payload) => {
+        const { studentId } = payload;
+        io.to(studentId).emit('admission denied');
+    });
+    socket.on('sending signal', payload => {
+        // payload: { userToSignal, callerID, signal, ...callerInfo }
+        io.to(payload.userToSignal).emit('user joined', {
+            signal: payload.signal,
+            callerID: payload.callerID,
+            callerName: payload.callerName,
+            callerInitials: payload.callerInitials,
+            callerBg: payload.callerBg,
+            callerRole: payload.callerRole
+        });
+    });
+
+    // WebRTC Signaling: Returning an answer/ICE candidate
+    socket.on('returning signal', payload => {
+        io.to(payload.callerID).emit('receiving returned signal', {
+            signal: payload.signal,
+            id: socket.id
+        });
+    });
+
+    // Chat Messages
+    socket.on('send message', payload => {
+        // Broadcast message to everyone in the room except sender
+        socket.to(payload.roomID).emit('new message', payload.message);
+    });
+    
+    // Toggle Media state
+    socket.on('toggle media', payload => {
+        socket.to(payload.roomID).emit('user toggled media', {
+            id: socket.id,
+            micOn: payload.micOn,
+            camOn: payload.camOn
+        });
+    });
+
+    // Toggle Screen Share
+    socket.on('screen share toggle', payload => {
+        socket.to(payload.roomID).emit('user toggled screen share', {
+            id: socket.id,
+            isScreenSharing: payload.isScreenSharing
+        });
+    });
+
+    // Raise Hand
+    socket.on('raise hand', payload => {
+        socket.to(payload.roomID).emit('user raised hand', {
+            id: socket.id,
+            handRaised: payload.handRaised
+        });
+    });
+
+    socket.on('disconnect', () => {
+        // Broadcast disconnection so clients can remove the peer
+        socket.broadcast.emit('user left', socket.id);
+    });
+});
+
+server.listen(PORT, () => {
     console.log(`Server is live at http://localhost:${PORT}`);
 });

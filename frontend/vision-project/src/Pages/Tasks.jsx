@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "../Context/authContext.jsx";
+import { getTasks, createTask, updateTask } from "../config/taskService.jsx";
+import { getProjects } from "../config/projectService.jsx";
+import { getInstructorDashboard } from "../config/dashboardService.jsx";
 
 const INITIAL_TASKS = [
     { id: 1,  name: "Build auth middleware with JWT",        project: "E-Commerce Platform", projColor: "#7F77DD", due: "Jun 12", priority: "high", done: false, assignee: "SA", assigneeBg: "linear-gradient(135deg,#534AB7,#7F77DD)", status: "In Progress" },
@@ -37,7 +41,7 @@ function TaskRow({ task, onToggle }) {
         >
             {/* Checkbox */}
             <button
-                onClick={() => onToggle(task.id)}
+                onClick={() => onToggle(task._id)}
                 aria-label={task.done ? "Mark incomplete" : "Mark complete"}
                 className="w-[18px] h-[18px] rounded-md flex items-center justify-center flex-shrink-0 transition-all"
                 style={{
@@ -160,9 +164,127 @@ function CustomDropdown({ options, value, onChange }) {
     );
 }
 
+// ─── Instructor Tasks Overview ───────────────────────────────────
+function InstructorTasksView() {
+    const [students, setStudents] = useState([]);
+    const [loading,  setLoading]  = useState(true);
+    const [studentTasks, setStudentTasks] = useState([]);
+    const [selectedStudent, setSelectedStudent] = useState(null);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const res = await getInstructorDashboard();
+                setStudents(res.data.students || []);
+            } catch (err) {
+                console.error('Failed to load students:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a14" }}>
+                <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>Loading students...</div>
+            </div>
+        );
+    }
+
+    const statCards = [
+        { value: students.length,                                           label: "Enrolled students", color: "#AFA9EC" },
+        { value: students.filter(s => s.status === "On track").length,     label: "On track",          color: "#5DCAA5" },
+        { value: students.filter(s => s.status === "Review due").length,   label: "Review due",        color: "#FAC775" },
+        { value: students.filter(s => s.status === "No project").length,   label: "No project",        color: "#E86C6B" },
+    ];
+
+    return (
+        <div className="min-h-screen p-5" style={{ background: "#0a0a14" }}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h1 className="text-base font-semibold text-white">Students Overview</h1>
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.25)" }}>Monitor your enrolled students' progress</p>
+                </div>
+                <div className="text-[10px] px-3 py-1.5 rounded-lg" style={{ background: "rgba(29,158,117,0.1)", color: "#5DCAA5", border: "0.5px solid rgba(29,158,117,0.2)" }}>
+                    <i className="ti ti-eye mr-1" aria-hidden="true" />
+                    Read-only view
+                </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-4 gap-3 mb-4">
+                {statCards.map((s, i) => (
+                    <div key={i} className="rounded-xl p-3.5" style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}>
+                        <div className="text-2xl font-semibold mb-0.5" style={{ color: s.color }}>{s.value}</div>
+                        <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>{s.label}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Info banner */}
+            <div className="rounded-xl p-4 mb-4 flex items-center gap-3" style={{ background: "rgba(127,119,221,0.06)", border: "0.5px solid rgba(127,119,221,0.15)" }}>
+                <i className="ti ti-info-circle" aria-hidden="true" style={{ fontSize: "20px", color: "#AFA9EC", flexShrink: 0 }} />
+                <div>
+                    <div className="text-xs font-medium text-white mb-0.5">Task management is student-only</div>
+                    <div className="text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>As an instructor, students manage their own tasks. You can view their projects and code reviews from the sidebar.</div>
+                </div>
+            </div>
+
+            {/* Students list */}
+            {students.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: "rgba(127,119,221,0.1)" }}>
+                        <i className="ti ti-users" aria-hidden="true" style={{ fontSize: "22px", color: "rgba(127,119,221,0.5)" }} />
+                    </div>
+                    <div className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>No enrolled students</div>
+                    <div className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.2)" }}>Students can enroll by selecting you as their instructor during signup</div>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-2">
+                    {students.map((s, i) => (
+                        <div key={s._id || i}
+                            className="flex items-center gap-3 p-3.5 rounded-xl transition-all"
+                            style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(127,119,221,0.25)"; e.currentTarget.style.background = "rgba(127,119,221,0.04)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                        >
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0"
+                                style={{ background: s.bg || "linear-gradient(135deg,#534AB7,#7F77DD)" }}>
+                                {s.initials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.75)" }}>{s.name}</div>
+                                <div className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>{s.project}</div>
+                            </div>
+                            {/* Progress bar */}
+                            <div className="flex items-center gap-2" style={{ width: "120px" }}>
+                                <div className="flex-1 h-0.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                                    <div className="h-full rounded-full transition-all" style={{ width: `${s.progress}%`, background: "linear-gradient(90deg,#7F77DD,#1D9E75)" }} />
+                                </div>
+                                <span className="text-[10px] flex-shrink-0" style={{ color: "rgba(255,255,255,0.3)" }}>{s.progress}%</span>
+                            </div>
+                            <span className="text-[10px] px-2.5 py-1 rounded-full flex-shrink-0"
+                                style={{
+                                    background: s.status === "Completed" ? "rgba(255,255,255,0.06)" : s.status === "Review due" ? "rgba(186,117,23,0.12)" : s.status === "No project" ? "rgba(224,75,74,0.12)" : "rgba(29,158,117,0.12)",
+                                    color:      s.status === "Completed" ? "rgba(255,255,255,0.3)"  : s.status === "Review due" ? "#FAC775"                  : s.status === "No project" ? "#E86C6B"               : "#5DCAA5",
+                                }}>{s.status}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Main Tasks Page ──────────────────────────────────────────────
 export default function Tasks() {
-    const [tasks,     setTasks]     = useState(INITIAL_TASKS);
+    const { user } = useAuth();
+    if (user?.role === 'instructor') return <InstructorTasksView />;
+    const [tasks,     setTasks]     = useState([]);
+    const [projects,  setProjects]  = useState([]);
     const [filter,    setFilter]    = useState("all");
     const [search,    setSearch]    = useState("");
     const [sort,      setSort]      = useState("due");
@@ -171,7 +293,6 @@ export default function Tasks() {
     const [mProject,  setMProject]  = useState("E-Commerce Platform");
     const [mPriority, setMPriority] = useState("med");
     const [mDue,      setMDue]      = useState("");
-    const [idCounter, setIdCounter] = useState(13);
 
     const projectOptions = [
         { name: "E-Commerce Platform", color: "#7F77DD" },
@@ -179,33 +300,70 @@ export default function Tasks() {
         { name: "Weather App",         color: "#D85A30" },
     ];
 
-    const handleCreateTask = () => {
-        if (!mName.trim()) return;
-        const proj = projectOptions.find(p => p.name === mProject);
-        const newTask = {
-            id:         idCounter,
-            name:       mName.trim(),
-            project:    mProject,
-            projColor:  proj.color,
-            due:        mDue || "No date",
-            priority:   mPriority,
-            done:       false,
-            assignee:   "SA",
-            assigneeBg: "linear-gradient(135deg,#534AB7,#7F77DD)",
-            status:     "To Do",
+    useEffect(() => {
+        const fetchTasksAndProjects = async () => {
+            try {
+                const [tasksRes, projectsRes] = await Promise.all([
+                    getTasks(),
+                    getProjects()
+                ]);
+                setTasks(tasksRes.data);
+                setProjects(projectsRes.data);
+                if (projectsRes.data && projectsRes.data.length > 0) {
+                    setMProject(projectsRes.data[0].name);
+                }
+            } catch (err) {
+                console.error("Failed to load tasks and projects:", err);
+            }
         };
-        setTasks(prev => [newTask, ...prev]);
-        setIdCounter(c => c + 1);
-        setMName(""); setMDue(""); setMPriority("med"); setMProject("E-Commerce Platform");
-        setShowModal(false);
+        fetchTasksAndProjects();
+    }, []);
+
+    const handleCreateTask = async () => {
+        if (!mName.trim()) return;
+        
+        // Find matching project from state or fallback
+        const proj = projects.find(p => p.name === mProject) || projectOptions.find(p => p.name === mProject) || { color: "#7F77DD" };
+        const projColor = proj.barColor || proj.color || "#7F77DD";
+
+        try {
+            const res = await createTask({
+                name: mName.trim(),
+                project: mProject,
+                projColor,
+                due: mDue || "No date",
+                priority: mPriority,
+                status: "To Do"
+            });
+            setTasks(prev => [res.data, ...prev]);
+            setMName(""); setMDue(""); setMPriority("med");
+            if (projects.length > 0) {
+                setMProject(projects[0].name);
+            } else {
+                setMProject("E-Commerce Platform");
+            }
+            setShowModal(false);
+        } catch (err) {
+            console.error("Failed to create task:", err);
+        }
     };
 
-    const toggleDone = (id) => {
-        setTasks(prev => prev.map(t => {
-            if (t.id !== id) return t;
-            const done = !t.done;
-            return { ...t, done, status: done ? "Done" : "To Do" };
-        }));
+    const toggleDone = async (id) => {
+        try {
+            const taskToToggle = tasks.find(t => t._id === id);
+            if (!taskToToggle) return;
+            const updatedDone = !taskToToggle.done;
+            const updatedStatus = updatedDone ? "Done" : "To Do";
+
+            await updateTask(id, { done: updatedDone, status: updatedStatus });
+
+            setTasks(prev => prev.map(t => {
+                if (t._id !== id) return t;
+                return { ...t, done: updatedDone, status: updatedStatus };
+            }));
+        } catch (err) {
+            console.error("Failed to toggle task:", err);
+        }
     };
 
     let visible = tasks.filter(t => {
@@ -330,7 +488,7 @@ export default function Tasks() {
             ) : (
                 <div className="flex flex-col gap-1.5">
                     {visible.map(t => (
-                        <TaskRow key={t.id} task={t} onToggle={toggleDone} />
+                        <TaskRow key={t._id} task={t} onToggle={toggleDone} />
                     ))}
                 </div>
             )}
@@ -362,7 +520,7 @@ export default function Tasks() {
 
                         <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Project</label>
                         <CustomDropdown
-                            options={projectOptions.map(p => p.name)}
+                            options={projects.length > 0 ? projects.map(p => p.name) : projectOptions.map(p => p.name)}
                             value={mProject}
                             onChange={setMProject}
                         />

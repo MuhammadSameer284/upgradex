@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { register } from "../config/authService.jsx";
+import { register as apiRegister } from "../config/authService.jsx";
+import { useAuth } from "../Context/authContext.jsx";
+import axios from 'axios';
 
 function Signup() {
     const navigate = useNavigate();
+    const { login: loginContext } = useAuth();
 
     const [role, setRole]             = useState("student");
     const [passStrength, setPassStrength] = useState(0);
@@ -11,6 +14,20 @@ function Signup() {
     const [email, setEmail]           = useState("");
     const [password, setPassword]     = useState("");
     const [error, setError]           = useState("");
+    const [instructors, setInstructors] = useState([]);
+    const [selectedInstructor, setSelectedInstructor] = useState("");
+
+    useEffect(() => {
+        const fetchInstructors = async () => {
+            try {
+                const res = await axios.get('http://localhost:3000/api/users/instructors');
+                setInstructors(res.data);
+            } catch (err) {
+                console.error("Failed to fetch instructors", err);
+            }
+        };
+        fetchInstructors();
+    }, []);
 
     const handlePassword = (e) => {
         setPassword(e.target.value);
@@ -23,14 +40,21 @@ function Signup() {
 
     const handleRegister = async (e) => {
         e.preventDefault();
+        
+        if (role === 'student' && !selectedInstructor) {
+            setError("Please select your Instructor to continue");
+            return;
+        }
+        
         try {
-            const res = await register({ name, email, password, role });
+            const payload = { name, email, password, role };
+            if (role === 'student') {
+                payload.instructorId = selectedInstructor;
+            }
+            const res = await apiRegister(payload);
 
-            // Save token using correct key
-            localStorage.setItem("upgradex_token", res.data.token);
-
-            // Save full user object
-            localStorage.setItem("upgradex_user", JSON.stringify(res.data.user));
+            // Save token and user dynamically in context
+            loginContext(res.data.user, res.data.token);
 
             // Redirect based on role from backend response
             if (res.data.user.role === "instructor") {
@@ -109,6 +133,26 @@ function Signup() {
 
                     {/* Fields */}
                     <div className="space-y-4">
+                        {role === 'student' && (
+                            <div style={{ marginBottom: '12px' }}>
+                                <label style={{ display: 'block', fontSize: '11px', marginBottom: '6px', color: 'rgba(255,255,255,0.35)' }}>Select your Instructor</label>
+                                <select
+                                    value={selectedInstructor}
+                                    onChange={e => setSelectedInstructor(e.target.value)}
+                                    style={{
+                                        width: '100%', borderRadius: '8px', padding: '8px 12px',
+                                        fontSize: '12px', outline: 'none', background: 'rgba(255,255,255,0.05)',
+                                        border: '0.5px solid rgba(255,255,255,0.1)', color: '#fff',
+                                        cursor: 'pointer', appearance: 'none'
+                                    }}
+                                >
+                                    <option value="" style={{ background: '#12121f' }}>-- Choose instructor --</option>
+                                    {instructors.map(i => (
+                                        <option key={i._id} value={i._id} style={{ background: '#12121f' }}>{i.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div className="relative">
                             <input type="text" id="name" placeholder=" " required
                                 value={name}

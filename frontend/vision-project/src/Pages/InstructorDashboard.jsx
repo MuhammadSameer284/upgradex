@@ -1,33 +1,53 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../Context/authContext.jsx";
-
-const STATS = [
-    { value: 12, label: "Total students", color: "#AFA9EC" },
-    { value: 8, label: "Active projects", color: "#5DCAA5" },
-    { value: 5, label: "Pending reviews", color: "#FAC775" },
-    { value: 3, label: "Calls today", color: "#E86C6B" },
-];
-
-const STUDENTS = [
-    { initials: "SA", name: "Sameer Ahmed", project: "E-Commerce Platform", progress: 65, status: "On track", statusBg: "rgba(29,158,117,0.12)", statusColor: "#5DCAA5", bg: "linear-gradient(135deg,#534AB7,#7F77DD)" },
-    { initials: "AR", name: "Ali Raza", project: "Student Portal API", progress: 40, status: "On track", statusBg: "rgba(29,158,117,0.12)", statusColor: "#5DCAA5", bg: "linear-gradient(135deg,#0F6E56,#1D9E75)" },
-    { initials: "SR", name: "Sara Raza", project: "Weather App", progress: 90, status: "Review due", statusBg: "rgba(186,117,23,0.12)", statusColor: "#FAC775", bg: "linear-gradient(135deg,#712B13,#D85A30)" },
-    { initials: "MK", name: "Maria Khan", project: "Chat Bot", progress: 20, status: "Behind", statusBg: "rgba(224,75,74,0.12)", statusColor: "#E86C6B", bg: "linear-gradient(135deg,#633806,#EF9F27)" },
-];
-
-const REVIEWS = [
-    { student: "Sameer Ahmed", project: "E-Commerce Platform", file: "authController.js", time: "2h ago", bg: "linear-gradient(135deg,#534AB7,#7F77DD)", initials: "SA" },
-    { student: "Sara Raza", project: "Weather App", file: "App.jsx", time: "5h ago", bg: "linear-gradient(135deg,#712B13,#D85A30)", initials: "SR" },
-];
+import { getInstructorDashboard } from "../config/dashboardService.jsx";
 
 export default function InstructorDashboard() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
+    const [statsData, setStatsData] = useState({ totalStudents: 0, activeProjects: 0, pendingReviews: 0, callsToday: 0 });
+    const [students, setStudents] = useState([]);
+    const [reviews, setReviews] = useState([]);
+    const [upcomingCall, setUpcomingCall] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchInstructorData = async () => {
+            try {
+                const res = await getInstructorDashboard();
+                setStatsData(res.data.stats);
+                setStudents(res.data.students);
+                setReviews(res.data.reviews);
+                if (res.data.upcomingCall) setUpcomingCall(res.data.upcomingCall);
+            } catch (err) {
+                console.error("Error loading instructor dashboard:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchInstructorData();
+    }, []);
+
     const today = new Date().toLocaleDateString("en-US", {
         weekday: "long", year: "numeric", month: "long", day: "numeric",
     });
+
+    const stats = [
+        { value: statsData.totalStudents, label: "Total students", color: "#AFA9EC" },
+        { value: statsData.activeProjects, label: "Active projects", color: "#5DCAA5" },
+        { value: statsData.pendingReviews, label: "Pending reviews", color: "#FAC775" },
+        { value: statsData.callsToday, label: "Calls today", color: "#E86C6B" },
+    ];
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a14" }}>
+                <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>Loading instructor workspace...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen p-6" style={{ background: "#0a0a14" }}>
@@ -67,9 +87,43 @@ export default function InstructorDashboard() {
                 </div>
             </div>
 
+            {/* ── Upcoming call banner ── */}
+            {upcomingCall && (
+                <div
+                    className="flex items-center justify-between px-5 py-4 rounded-xl mb-5"
+                    style={{ background: "rgba(127,119,221,0.08)", border: "0.5px solid rgba(127,119,221,0.2)" }}
+                >
+                    <div className="flex items-center gap-3">
+                        <div
+                            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                            style={{ background: "rgba(127,119,221,0.15)" }}
+                        >
+                            <i className="ti ti-video" aria-hidden="true" style={{ fontSize: "20px", color: "#7F77DD" }} />
+                        </div>
+                        <div>
+                            <div className="text-sm font-medium" style={{ color: "#AFA9EC" }}>
+                                {upcomingCall.title || "Video call scheduled"}
+                            </div>
+                            <div className="text-xs mt-0.5" style={{ color: "rgba(127,119,221,0.5)" }}>
+                                {new Date(upcomingCall.scheduledAt).toLocaleString("en-US", {
+                                    weekday: "long", hour: "numeric", minute: "numeric", hour12: true
+                                })} {upcomingCall.projectName ? `for ${upcomingCall.projectName}` : ""}
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => navigate("/video")}
+                        className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all hover:opacity-80"
+                        style={{ background: "rgba(127,119,221,0.3)", border: "none", cursor: "pointer" }}
+                    >
+                        Join call
+                    </button>
+                </div>
+            )}
+
             {/* ── Stats ── */}
             <div className="grid grid-cols-4 gap-3 mb-5">
-                {STATS.map((s, i) => (
+                {stats.map((s, i) => (
                     <div key={i} className="rounded-xl p-4"
                         style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}>
                         <div className="text-2xl font-semibold mb-0.5" style={{ color: s.color }}>{s.value}</div>
@@ -90,10 +144,10 @@ export default function InstructorDashboard() {
                         <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>Batch 42</span>
                     </div>
 
-                    {STUDENTS.map((s, i) => (
-                        <div key={i} className="flex items-center gap-3 mb-3">
+                    {students.map((s, i) => (
+                        <div key={s._id || i} className="flex items-center gap-3 mb-3">
                             <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
-                                style={{ background: s.bg }}>
+                                style={{ background: s.bg || "linear-gradient(135deg,#534AB7,#7F77DD)" }}>
                                 {s.initials}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -102,7 +156,10 @@ export default function InstructorDashboard() {
                                         {s.name}
                                     </span>
                                     <span className="text-[10px] px-2 py-0.5 rounded-full"
-                                        style={{ background: s.statusBg, color: s.statusColor }}>
+                                        style={{
+                                            background: s.status === 'Completed' ? 'rgba(127,119,221,0.12)' : s.status === 'Review due' ? 'rgba(186,117,23,0.12)' : 'rgba(29,158,117,0.12)',
+                                            color: s.status === 'Completed' ? '#AFA9EC' : s.status === 'Review due' ? '#FAC775' : '#5DCAA5'
+                                        }}>
                                         {s.status}
                                     </span>
                                 </div>
@@ -128,12 +185,12 @@ export default function InstructorDashboard() {
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full"
                             style={{ background: "rgba(224,75,74,0.12)", color: "#E86C6B" }}>
-                            {REVIEWS.length} open
+                            {reviews.length} open
                         </span>
                     </div>
 
-                    {REVIEWS.map((r, i) => (
-                        <div key={i}
+                    {reviews.map((r, i) => (
+                        <div key={r._id || i}
                             className="flex items-center gap-3 p-3 rounded-xl mb-2 cursor-pointer transition-all"
                             style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.06)" }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(127,119,221,0.3)"; e.currentTarget.style.background = "rgba(127,119,221,0.05)"; }}
@@ -141,12 +198,12 @@ export default function InstructorDashboard() {
                             onClick={() => navigate("/review")}
                         >
                             <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
-                                style={{ background: r.bg }}>
+                                style={{ background: r.bg || "linear-gradient(135deg,#0F6E56,#1D9E75)" }}>
                                 {r.initials}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="text-xs font-medium mb-0.5" style={{ color: "rgba(255,255,255,0.7)" }}>
-                                    {r.student}
+                                    {r.studentName}
                                 </div>
                                 <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>
                                     {r.project} · {r.file}
@@ -156,7 +213,7 @@ export default function InstructorDashboard() {
                         </div>
                     ))}
 
-                    {REVIEWS.length === 0 && (
+                    {reviews.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-8 gap-2">
                             <i className="ti ti-check" aria-hidden="true" style={{ fontSize: "24px", color: "#1D9E75" }} />
                             <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>All reviews done!</div>

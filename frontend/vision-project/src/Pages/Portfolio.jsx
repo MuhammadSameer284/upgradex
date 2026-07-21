@@ -1,6 +1,9 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { usePDF } from "react-to-pdf";
 import { useAuth } from "../Context/authContext.jsx";
+import { getPortfolios } from "../config/portfolioService.jsx";
+import { getUserProfile } from "../config/userService.jsx";
+import { getProjects } from '../config/projectService.jsx';
 
 const PROJECTS = [
     { id: 1, initials: "EC", name: "E-Commerce Platform", desc: "Full-stack online store with cart, payments and order tracking built with MERN stack.", tech: ["React", "Node.js", "MongoDB", "Stripe"], gradFrom: "#534AB7", gradTo: "#7F77DD", bg: "rgba(83,74,183,0.15)", date: "Jun 2026", github: "#", demo: "#" },
@@ -124,12 +127,135 @@ function ShareModal({ onClose }) {
     );
 }
 
+// ── Instructor Portfolio View ─────────────────────────────────────
+function InstructorPortfolioView({ user }) {
+    return (
+        <div className="min-h-screen p-5" style={{ background: "#0a0a14" }}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+                <div>
+                    <h1 className="text-base font-semibold text-white">Portfolio</h1>
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.25)" }}>Student portfolio overview</p>
+                </div>
+                <div className="text-[10px] px-3 py-1.5 rounded-lg" style={{ background: "rgba(29,158,117,0.1)", color: "#5DCAA5", border: "0.5px solid rgba(29,158,117,0.2)" }}>
+                    <i className="ti ti-eye mr-1" aria-hidden="true" />
+                    Instructor view
+                </div>
+            </div>
+
+            {/* Info banner */}
+            <div className="rounded-xl p-5 mb-5 flex items-start gap-4" style={{ background: "rgba(127,119,221,0.06)", border: "0.5px solid rgba(127,119,221,0.15)" }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(127,119,221,0.12)" }}>
+                    <i className="ti ti-briefcase" aria-hidden="true" style={{ fontSize: "20px", color: "#AFA9EC" }} />
+                </div>
+                <div>
+                    <div className="text-sm font-medium text-white mb-1">Portfolio is a student workspace</div>
+                    <div className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
+                        Students build and share their portfolios here. As an instructor, you can review student work via{" "}
+                        <span style={{ color: "#AFA9EC" }}>Code Reviews</span> or monitor progress on the{" "}
+                        <span style={{ color: "#5DCAA5" }}>Kanban Board</span>.
+                    </div>
+                </div>
+            </div>
+
+            {/* Instructor profile card */}
+            <div className="rounded-2xl p-5" style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}>
+                <div className="flex items-center gap-4 mb-5">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
+                        style={{ background: "linear-gradient(135deg,#0F6E56,#1D9E75)" }}>
+                        {user?.name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() || "IN"}
+                    </div>
+                    <div>
+                        <div className="text-sm font-semibold text-white">{user?.name || "Instructor"}</div>
+                        <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>{user?.email}</div>
+                        <span className="inline-block text-[10px] px-2 py-0.5 rounded-full mt-1.5" style={{ background: "rgba(29,158,117,0.12)", color: "#5DCAA5", border: "0.5px solid rgba(29,158,117,0.2)" }}>
+                            Instructor
+                        </span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                    {[
+                        { icon: "ti-code", label: "Review student code", color: "#AFA9EC", bg: "rgba(127,119,221,0.1)", href: "/review" },
+                        { icon: "ti-layout-kanban", label: "View student progress", color: "#5DCAA5", bg: "rgba(29,158,117,0.1)", href: "/kanban" },
+                        { icon: "ti-video", label: "Schedule a call", color: "#FAC775", bg: "rgba(186,117,23,0.1)", href: "/video" },
+                    ].map((a, i) => (
+                        <a key={i} href={a.href}
+                            className="flex flex-col items-center gap-2 p-4 rounded-xl transition-all"
+                            style={{ background: a.bg, textDecoration: "none" }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = "0.8"}
+                            onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                        >
+                            <i className={`ti ${a.icon}`} aria-hidden="true" style={{ fontSize: "22px", color: a.color }} />
+                            <span className="text-xs font-medium text-center" style={{ color: a.color }}>{a.label}</span>
+                        </a>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function Portfolio() {
     const { user }              = useAuth();
+    if (user?.role === "instructor") return <InstructorPortfolioView user={user} />;
     const [showShare, setShowShare] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [exported,  setExported]  = useState(false);
+    const [projects,  setProjects]  = useState(PROJECTS);
+    const [skills,    setSkills]    = useState(SKILLS);
+    const [stats,     setStats]     = useState(STATS);
+    const [bio,       setBio]       = useState("MERN stack developer studying at Aptech.");
+    const [github,    setGithub]    = useState("github.com/sameer-ahmed");
     const { toPDF, targetRef }      = usePDF({ filename: `${user?.name?.toLowerCase().replace(/\s+/g, "-") || "user"}-portfolio.pdf` });
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [portfolioRes, profileRes, projectsRes] = await Promise.all([
+                    getPortfolios(),
+                    getUserProfile(),
+                    getProjects()
+                ]);
+
+                const completedProjects = projectsRes.data.filter(p => p.status === 'completed');
+
+                if (portfolioRes.data && portfolioRes.data.length > 0) {
+                    setProjects(portfolioRes.data);
+                    setStats([
+                        { value: portfolioRes.data.length, label: "Projects completed", color: "#AFA9EC" },
+                        { value: portfolioRes.data.reduce((acc, p) => acc + (p.tech?.length || 0), 0), label: "Technologies used", color: "#5DCAA5" },
+                        { value: 3, label: "Months of learning", color: "#FAC775" },
+                        { value: 24, label: "Tasks completed", color: "#E86C6B" },
+                    ]);
+                } else if (completedProjects.length > 0) {
+                    const mapped = completedProjects.map(p => ({
+                        ...p,
+                        id: p._id,
+                        date: p.updatedAt ? new Date(p.updatedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recent',
+                        github: p.github || '#',
+                        demo: p.demo || '#'
+                    }));
+                    setProjects(mapped);
+                    setStats([
+                        { value: mapped.length, label: "Projects completed", color: "#AFA9EC" },
+                        { value: mapped.reduce((acc, p) => acc + (p.tech?.length || 0), 0), label: "Technologies used", color: "#5DCAA5" },
+                        { value: 3, label: "Months of learning", color: "#FAC775" },
+                        { value: mapped.length * 5, label: "Tasks completed", color: "#E86C6B" },
+                    ]);
+                }
+
+                if (profileRes.data) {
+                    if (profileRes.data.skills?.length > 0) setSkills(profileRes.data.skills);
+                    if (profileRes.data.bio)    setBio(profileRes.data.bio);
+                    if (profileRes.data.github) setGithub(profileRes.data.github);
+                }
+            } catch (err) {
+                console.error("Failed to load portfolio data:", err);
+            }
+        };
+        fetchData();
+    }, []);
 
     const handleExport = async () => {
         setExporting(true);
@@ -163,7 +289,7 @@ export default function Portfolio() {
                                 MERN Stack Developer · Aptech Batch 42
                             </p>
                             <div className="flex flex-wrap gap-1.5">
-                                {SKILLS.map(s => (
+                                {skills.map(s => (
                                     <span key={s} className="text-[10px] px-2 py-0.5 rounded-full"
                                         style={{ background: "rgba(127,119,221,0.15)", border: "0.5px solid rgba(127,119,221,0.2)", color: "#AFA9EC" }}>
                                         {s}
@@ -192,7 +318,7 @@ export default function Portfolio() {
 
                 {/* ── Stats ── */}
                 <div className="grid grid-cols-4 gap-3 mb-5">
-                    {STATS.map((s, i) => (
+                    {stats.map((s, i) => (
                         <div key={i} className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}>
                             <div className="text-2xl font-semibold mb-1" style={{ color: s.color }}>{s.value}</div>
                             <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>{s.label}</div>
@@ -206,7 +332,7 @@ export default function Portfolio() {
                     <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>Auto-generated from UpgradeX</span>
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-5">
-                    {PROJECTS.map(p => <ProjectCard key={p.id} project={p} />)}
+                    {projects.map((p, i) => <ProjectCard key={p._id || p.id || i} project={p} />)}
                 </div>
 
                 {/* ── About + Contact ── */}
@@ -214,14 +340,14 @@ export default function Portfolio() {
                     <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}>
                         <h3 className="text-xs font-medium mb-3" style={{ color: "rgba(255,255,255,0.5)" }}>About</h3>
                         <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
-                            MERN stack developer currently studying at Aptech. Passionate about building real-world web applications and learning modern development practices through hands-on projects in the UpgradeX platform.
+                            {bio}
                         </p>
                     </div>
                     <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}>
                         <h3 className="text-xs font-medium mb-3" style={{ color: "rgba(255,255,255,0.5)" }}>Contact</h3>
                         {[
                             { icon: "ti-mail",         value: user?.email || "sameer@aptech.com" },
-                            { icon: "ti-brand-github", value: "github.com/sameer-ahmed"          },
+                            { icon: "ti-brand-github", value: github },
                         ].map((c, i) => (
                             <div key={i} className="flex items-center gap-2.5 mb-2.5">
                                 <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "rgba(127,119,221,0.1)" }}>

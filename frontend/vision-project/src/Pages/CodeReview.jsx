@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../Context/authContext.jsx";
 import Editor from "@monaco-editor/react";
+import { getReviews, addComment, resolveComment, updateReviewStatus, createReview } from "../config/codeReviewService.jsx";
 
 const SAMPLE_CODE = `const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
@@ -102,14 +103,41 @@ function CommentCard({ comment, onResolve, onClick, userRole }) {
 // ─── Main Code Review Page ───────────────────────────────────────
 export default function CodeReview() {
     const { user }                          = useAuth();
-    const [comments,     setComments]       = useState(INITIAL_COMMENTS);
+    const [review,       setReview]         = useState(null);
+    const [comments,     setComments]       = useState([]);
+    const [code,         setCode]           = useState("");
+    const [status,       setStatus]         = useState("pending");
+    const [allReviews,   setAllReviews]     = useState([]);
+    const [selectedReviewIdx, setSelectedReviewIdx] = useState(0);
     const [selectedLine, setSelectedLine]   = useState(null);
     const [commentText,  setCommentText]    = useState("");
-    const [idCounter,    setIdCounter]      = useState(4);
     const [language,     setLanguage]       = useState("javascript");
-    const [status,       setStatus]         = useState("pending");
+    const [loading,      setLoading]        = useState(true);
+    const [showSubmitModal, setShowSubmitModal] = useState(false);
+    const [submitForm, setSubmitForm] = useState({ project: "E-Commerce Platform", file: "newFeature.js", code: "" });
     const editorRef = useRef(null);
     const inputRef  = useRef(null);
+
+    useEffect(() => {
+        const fetchReviewData = async () => {
+            try {
+                const res = await getReviews();
+                if (res.data && res.data.length > 0) {
+                    setAllReviews(res.data);
+                    const activeReview = res.data[0];
+                    setReview(activeReview);
+                    setComments(activeReview.comments || []);
+                    setCode(activeReview.code || "");
+                    setStatus(activeReview.status || "pending");
+                }
+            } catch (err) {
+                console.error("Failed to load code review:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchReviewData();
+    }, []);
 
     const handleEditorMount = (editor) => {
         editorRef.current = editor;
@@ -143,38 +171,56 @@ export default function CodeReview() {
         if (editorRef.current) updateDecorations(editorRef.current);
     }, [comments]);
 
-    const handleAddComment = () => {
-        if (!commentText.trim() || !selectedLine) return;
-
-        // Get initials from logged-in user
-        const initials = user?.name
-            ?.split(" ")
-            .map(w => w[0])
-            .slice(0, 2)
-            .join("")
-            .toUpperCase() || "U";
-
-        const newComment = {
-            id:       idCounter,
-            line:     selectedLine,
-            text:     commentText.trim(),
-            author:   user?.name || "User",
-            initials,
-            bg:       user?.role === "instructor"
-                        ? "linear-gradient(135deg,#0F6E56,#1D9E75)"
-                        : "linear-gradient(135deg,#534AB7,#7F77DD)",
-            resolved: false,
-            time:     "Just now",
-        };
-
-        setComments(prev => [...prev, newComment]);
-        setIdCounter(c => c + 1);
-        setCommentText("");
-        setSelectedLine(null);
+    const handleAddComment = async () => {
+        if (!commentText.trim() || !selectedLine || !review) return;
+        try {
+            const res = await addComment(review._id, selectedLine, commentText.trim());
+            setReview(res.data);
+            setComments(res.data.comments || []);
+            setCommentText("");
+            setSelectedLine(null);
+        } catch (err) {
+            console.error("Failed to add comment:", err);
+        }
     };
 
-    const handleResolve = (id) => {
-        setComments(prev => prev.map(c => c.id === id ? { ...c, resolved: true } : c));
+    const handleSubmitReview = async () => {
+        if (!submitForm.code.trim()) return;
+        try {
+            const res = await createReview(submitForm);
+            setAllReviews([res.data, ...allReviews]);
+            setReview(res.data);
+            setComments(res.data.comments || []);
+            setCode(res.data.code || "");
+            setStatus(res.data.status || "pending");
+            setSelectedReviewIdx(0); // newly added is at the top
+            setShowSubmitModal(false);
+            setSubmitForm({ project: "E-Commerce Platform", file: "newFeature.js", code: "" });
+        } catch (err) {
+            console.error("Failed to submit review:", err);
+        }
+    };
+
+    const handleResolve = async (commentId) => {
+        if (!review) return;
+        try {
+            const res = await resolveComment(review._id, commentId);
+            setReview(res.data);
+            setComments(res.data.comments || []);
+        } catch (err) {
+            console.error("Failed to resolve comment:", err);
+        }
+    };
+
+    const handleStatusUpdate = async (newStatus) => {
+        if (!review) return;
+        try {
+            const res = await updateReviewStatus(review._id, newStatus);
+            setReview(res.data);
+            setStatus(res.data.status);
+        } catch (err) {
+            console.error("Failed to update status:", err);
+        }
     };
 
     const scrollToLine = (line) => {
@@ -208,9 +254,9 @@ export default function CodeReview() {
                         <i className="ti ti-code" aria-hidden="true" style={{ fontSize: "16px", color: "#fff" }} />
                     </div>
                     <div>
-                        <div className="text-sm font-medium text-white">Code Review — E-Commerce Platform</div>
+                        <div className="text-sm font-medium text-white">Code Review — {review?.project || "Project"}</div>
                         <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.25)" }}>
-                            auth/authController.js · Submitted by Muhammad Sameer
+                            {review?.file || "file.js"} · Submitted by {review?.studentName || "Student"}
                         </div>
                     </div>
                     <span
@@ -258,7 +304,7 @@ export default function CodeReview() {
                     {user?.role === "instructor" && (
                         <>
                             <button
-                                onClick={() => setStatus("approved")}
+                                onClick={() => handleStatusUpdate("approved")}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                                 style={{ background: "rgba(29,158,117,0.12)", color: "#5DCAA5", border: "none", cursor: "pointer" }}
                             >
@@ -266,7 +312,7 @@ export default function CodeReview() {
                                 Approve
                             </button>
                             <button
-                                onClick={() => setStatus("changes")}
+                                onClick={() => handleStatusUpdate("changes")}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                                 style={{ background: "rgba(224,75,74,0.12)", color: "#E86C6B", border: "none", cursor: "pointer" }}
                             >
@@ -279,7 +325,8 @@ export default function CodeReview() {
                     {/* ✅ Student only — Submit for review */}
                     {user?.role === "student" && (
                         <button
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all"
+                            onClick={() => setShowSubmitModal(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90"
                             style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
                         >
                             <i className="ti ti-upload" aria-hidden="true" style={{ fontSize: "13px" }} />
@@ -291,6 +338,40 @@ export default function CodeReview() {
 
             {/* ── Body ── */}
             <div className="flex flex-1 overflow-hidden">
+                {allReviews.length > 0 && (
+                  <div className="w-48 flex-shrink-0 flex flex-col" style={{ borderRight: '0.5px solid rgba(255,255,255,0.07)', overflowY: 'auto' }}>
+                    <div className="p-3 text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        {user?.role === 'instructor' ? 'Student Submissions' : 'My Submissions'}
+                    </div>
+                    {allReviews.map((r, i) => (
+                      <button key={r._id || i} onClick={() => {
+                        setReview(r);
+                        setComments(r.comments || []);
+                        setCode(r.code || '');
+                        setStatus(r.status || 'pending');
+                        setSelectedReviewIdx(i);
+                      }}
+                        className="flex items-center gap-2 px-3 py-2.5 text-left transition-all"
+                        style={{
+                          background: selectedReviewIdx === i ? 'rgba(127,119,221,0.1)' : 'transparent',
+                          borderLeft: selectedReviewIdx === i ? '2px solid #7F77DD' : '2px solid transparent',
+                          border: 'none', cursor: 'pointer'
+                        }}
+                      >
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                          style={{ background: 'linear-gradient(135deg,#534AB7,#7F77DD)' }}
+                        >
+                          {r.initials || r.studentName?.slice(0,2).toUpperCase() || 'ST'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[10px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.7)' }}>{r.studentName || 'Student'}</div>
+                          <div className="text-[9px] truncate" style={{ color: 'rgba(255,255,255,0.25)' }}>{r.file}</div>
+                        </div>
+                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: r.status === 'approved' ? '#1D9E75' : r.status === 'changes' ? '#E86C6B' : '#FAC775' }} />
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* ── Editor pane ── */}
                 <div className="flex flex-col flex-1 overflow-hidden" style={{ borderRight: "0.5px solid rgba(255,255,255,0.07)" }}>
@@ -298,19 +379,16 @@ export default function CodeReview() {
                         className="flex items-center px-3 gap-1 flex-shrink-0"
                         style={{ background: "#0d0d1a", borderBottom: "0.5px solid rgba(255,255,255,0.07)" }}
                     >
-                        {["authController.js", "authRoutes.js"].map((f, i) => (
-                            <div
-                                key={f}
-                                className="flex items-center gap-1.5 px-3 py-2 text-xs cursor-pointer transition-all"
-                                style={{
-                                    color:        i === 0 ? "#AFA9EC" : "rgba(255,255,255,0.35)",
-                                    borderBottom: i === 0 ? "1.5px solid #7F77DD" : "1.5px solid transparent",
-                                }}
-                            >
-                                <i className="ti ti-file-code" aria-hidden="true" style={{ fontSize: "13px" }} />
-                                {f}
-                            </div>
-                        ))}
+                        <div
+                            className="flex items-center gap-1.5 px-3 py-2 text-xs cursor-pointer transition-all"
+                            style={{
+                                color: "#AFA9EC",
+                                borderBottom: "1.5px solid #7F77DD",
+                            }}
+                        >
+                            <i className="ti ti-file-code" aria-hidden="true" style={{ fontSize: "13px" }} />
+                            {review?.file || "file.js"}
+                        </div>
                     </div>
 
                     {selectedLine && (
@@ -335,7 +413,7 @@ export default function CodeReview() {
                         <Editor
                             height="100%"
                             language={language}
-                            value={SAMPLE_CODE}
+                            value={code}
                             theme="vs-dark"
                             onMount={handleEditorMount}
                             options={{
@@ -425,6 +503,77 @@ export default function CodeReview() {
                     </div>
                 </div>
             </div>
+
+            {/* ── Submit Modal (Student Only) ── */}
+            {showSubmitModal && (
+                <div
+                    className="fixed inset-0 flex items-center justify-center z-50"
+                    style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+                    onClick={e => { if (e.target === e.currentTarget) setShowSubmitModal(false); }}
+                >
+                    <div
+                        className="w-[500px] rounded-2xl p-5"
+                        style={{ background: "#12121f", border: "0.5px solid rgba(255,255,255,0.1)" }}
+                    >
+                        <h2 className="text-sm font-medium text-white mb-4">Submit Code for Review</h2>
+                        <div className="flex flex-col gap-3">
+                            <div>
+                                <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Project Name</label>
+                                <input
+                                    type="text"
+                                    value={submitForm.project}
+                                    onChange={e => setSubmitForm({...submitForm, project: e.target.value})}
+                                    className="w-full rounded-lg px-3 py-2 text-xs outline-none text-white"
+                                    style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>File Name</label>
+                                <input
+                                    type="text"
+                                    value={submitForm.file}
+                                    onChange={e => setSubmitForm({...submitForm, file: e.target.value})}
+                                    className="w-full rounded-lg px-3 py-2 text-xs outline-none text-white"
+                                    style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Code Snippet</label>
+                                <textarea
+                                    value={submitForm.code}
+                                    onChange={e => setSubmitForm({...submitForm, code: e.target.value})}
+                                    rows={8}
+                                    className="w-full rounded-lg px-3 py-2 text-xs outline-none text-white resize-none"
+                                    style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)", fontFamily: "'Fira Code', monospace" }}
+                                    placeholder="Paste your code here..."
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-5">
+                            <button
+                                onClick={() => setShowSubmitModal(false)}
+                                className="px-4 py-2 rounded-lg text-xs"
+                                style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "none", cursor: "pointer" }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSubmitReview}
+                                disabled={!submitForm.code.trim()}
+                                className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90"
+                                style={{
+                                    background: submitForm.code.trim() ? "linear-gradient(135deg,#7F77DD,#1D9E75)" : "rgba(255,255,255,0.06)",
+                                    border: "none",
+                                    cursor: submitForm.code.trim() ? "pointer" : "not-allowed",
+                                    color: submitForm.code.trim() ? "#fff" : "rgba(255,255,255,0.25)",
+                                }}
+                            >
+                                Submit Code
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -6,7 +6,7 @@ import user from '../models/authModel.js';
 //Register 
 export const register = async (req, res) => {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, email, password, role, instructorId } = req.body;
 
         // verifing user if exists!
         const userExists = await user.findOne({ email });
@@ -19,13 +19,16 @@ export const register = async (req, res) => {
 
         // saving data to database
         const newUser = new user({ name, email, password: hashedPassword, role });
+        if (instructorId) {
+            newUser.instructorId = instructorId;
+        }
         await newUser.save();
 
         //generating token
         const token = jwt.sign(
             { id: newUser._id, role: newUser.role },
             process.env.JWT_SECRET,
-            { expires: '1d' }
+            { expiresIn: '1d' }
         );
 
 
