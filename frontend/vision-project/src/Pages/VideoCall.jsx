@@ -1,757 +1,830 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../Context/authContext.jsx";
 import { getCalls, scheduleCall } from '../config/videoCallService.jsx';
 import io from 'socket.io-client';
 import Peer from 'simple-peer';
 
-// ─── VideoTile Component ──────────────────────────────────────────────────
-function VideoTile({ stream, participant, large }) {
+// ─── Helpers ───────────────────────────────────────────────────────────────
+const getInitials = (name) =>
+    name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() || "U";
+
+const formatDuration = (s) => {
+    const h = Math.floor(s / 3600);
+    const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+    const sec = String(s % 60).padStart(2, "0");
+    return h > 0 ? `${h}:${m}:${sec}` : `${m}:${sec}`;
+};
+
+// ─── VideoTile — single participant tile ───────────────────────────────────
+function VideoTile({ stream, participant, isLarge, isFocused, onClick }) {
     const videoRef = useRef(null);
 
     useEffect(() => {
-        if (videoRef.current && stream) {
-            videoRef.current.srcObject = stream;
+        if (videoRef.current) {
+            videoRef.current.srcObject = stream || null;
         }
     }, [stream]);
 
+    const hasCam = participant?.camOn !== false;
+    const hasMic = participant?.micOn !== false;
+    const isSharing = participant?.isScreenSharing;
+
     return (
         <div
-            className="relative rounded-xl overflow-hidden flex items-center justify-center transition-all"
+            className="relative rounded-2xl overflow-hidden flex items-center justify-center cursor-pointer select-none"
+            onClick={onClick}
             style={{
-                background: "linear-gradient(135deg,#0d0d1e,#1a1a2e)",
-                border: participant?.speaking ? "1.5px solid rgba(29,158,117,0.6)" : "1px solid rgba(255,255,255,0.06)",
-                minHeight: large ? "100%" : "140px",
-                width: "100%", height: "100%"
+                background: "linear-gradient(145deg,#1a1a2e,#0d0d1e)",
+                border: isFocused
+                    ? "2px solid #7F77DD"
+                    : "1px solid rgba(255,255,255,0.07)",
+                width: "100%",
+                height: "100%",
+                minHeight: isLarge ? "unset" : "120px",
+                transition: "border-color 0.2s",
             }}
         >
-            {stream ? (
-                <video 
-                    ref={videoRef} 
-                    autoPlay 
-                    playsInline 
-                    muted={participant?.isLocal}
-                    style={{ 
-                        width: "100%", 
-                        height: "100%", 
-                        objectFit: participant?.isScreenSharing ? "contain" : "cover",
-                        background: "#000"
-                    }}
-                />
-            ) : (
+            {/* Video element — always mounted, srcObject driven by effect */}
+            <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted={participant?.isLocal}
+                style={{
+                    display: (stream && hasCam) ? "block" : "none",
+                    width: "100%",
+                    height: "100%",
+                    objectFit: isSharing ? "contain" : "cover",
+                    background: "#000",
+                }}
+            />
+
+            {/* Avatar fallback */}
+            {(!stream || !hasCam) && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-white text-xl" style={{ background: participant?.bg || "#7F77DD" }}>
-                        {participant?.initials || "U"}
+                    <div
+                        className="rounded-full flex items-center justify-center font-bold text-white"
+                        style={{
+                            width: isLarge ? "96px" : "52px",
+                            height: isLarge ? "96px" : "52px",
+                            fontSize: isLarge ? "2rem" : "1.1rem",
+                            background: participant?.bg || "linear-gradient(135deg,#534AB7,#7F77DD)",
+                        }}
+                    >
+                        {participant?.initials || "?"}
                     </div>
                 </div>
             )}
-            
-            {/* Overlay Elements */}
+
+            {/* Screen share badge */}
+            {isSharing && (
+                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ background: "rgba(127,119,221,0.85)", backdropFilter: "blur(4px)" }}>
+                    <i className="ti ti-screen-share" style={{ fontSize: "11px", color: "#fff" }} />
+                    <span className="text-[10px] text-white font-medium">Screen</span>
+                </div>
+            )}
+
+            {/* Name bar */}
             <div
-                className="absolute bottom-2 left-2.5 text-[10px] font-medium text-white px-2 py-0.5 rounded-full z-10 flex items-center gap-1.5"
-                style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+                className="absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-2"
+                style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.75))" }}
             >
-                {participant?.name || "Participant"} {participant?.isLocal && "· You"}
-                {participant?.handRaised && <span className="text-xs">✋</span>}
+                <span className="text-xs font-medium text-white flex-1 truncate">
+                    {participant?.name || "Participant"}
+                    {participant?.isLocal && " (You)"}
+                    {participant?.role === "instructor" && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded text-[9px]" style={{ background: "rgba(127,119,221,0.4)" }}>HOST</span>
+                    )}
+                </span>
+                <div className="flex items-center gap-1">
+                    {participant?.handRaised && <span className="text-sm">✋</span>}
+                    {!hasMic && <i className="ti ti-microphone-off" style={{ fontSize: "12px", color: "#E86C6B" }} />}
+                    {!hasCam && !isSharing && <i className="ti ti-video-off" style={{ fontSize: "12px", color: "#E86C6B" }} />}
+                </div>
             </div>
-            
-            {/* Top Right Status Icons */}
-            <div className="absolute top-2 right-2 flex gap-1 z-10">
-                {participant?.camOn === false && (
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "rgba(224,75,74,0.85)" }}>
-                        <i className="ti ti-video-off" aria-hidden="true" style={{ fontSize: "11px", color: "#fff" }} />
-                    </div>
-                )}
-                {participant?.micOn === false && (
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "rgba(224,75,74,0.85)" }}>
-                        <i className="ti ti-microphone-off" aria-hidden="true" style={{ fontSize: "11px", color: "#fff" }} />
-                    </div>
-                )}
-            </div>
-            
-            {/* Large Hand Raise Indicator */}
-            {participant?.handRaised && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center animate-bounce" style={{ background: "rgba(127,119,221,0.2)", border: "1px solid rgba(127,119,221,0.4)", backdropFilter: "blur(4px)" }}>
-                        <span className="text-3xl">✋</span>
-                    </div>
+        </div>
+    );
+}
+
+// ─── CtrlBtn — icon button in the control bar ─────────────────────────────
+function CtrlBtn({ icon, iconOff, active, onClick, danger, label, badge }) {
+    return (
+        <div className="relative">
+            <button
+                onClick={onClick}
+                title={label}
+                aria-label={label}
+                className="flex items-center justify-center rounded-xl transition-all"
+                style={{
+                    width: "48px",
+                    height: "48px",
+                    background: danger
+                        ? "#E24B4A"
+                        : active
+                        ? "rgba(127,119,221,0.25)"
+                        : "rgba(255,255,255,0.08)",
+                    border: active && !danger ? "1.5px solid rgba(127,119,221,0.4)" : "1.5px solid transparent",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.08)")}
+                onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
+            >
+                <i
+                    className={`ti ${active ? icon : iconOff || icon}`}
+                    aria-hidden="true"
+                    style={{
+                        fontSize: "20px",
+                        color: danger ? "#fff" : active ? "#AFA9EC" : "rgba(255,255,255,0.55)",
+                    }}
+                />
+            </button>
+            {badge != null && badge > 0 && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white" style={{ background: "#7F77DD" }}>
+                    {badge}
                 </div>
             )}
         </div>
     );
 }
 
-function CtrlBtn({ icon, iconOff, active, onClick, danger, large, label }) {
-    return (
-        <button
-            onClick={onClick}
-            title={label}
-            aria-label={label}
-            className="flex items-center justify-center rounded-full transition-all flex-shrink-0"
-            style={{
-                width:      large ? "52px" : "44px",
-                height:     large ? "52px" : "44px",
-                background: danger ? "#E24B4A" : active ? "rgba(255,255,255,0.1)" : "rgba(224,75,74,0.2)",
-                border: "none", cursor: "pointer",
-            }}
-            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
-            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-        >
-            <i
-                className={`ti ${active ? icon : (iconOff || icon)}`}
-                aria-hidden="true"
-                style={{
-                    fontSize: "20px",
-                    color: active ? "rgba(255,255,255,0.8)" : danger ? "#fff" : "#E86C6B",
-                }}
-            />
-        </button>
-    );
-}
-
+// ─── Main Component ────────────────────────────────────────────────────────
 export default function VideoCall() {
-    const { user }                              = useAuth();
-    const [joined,       setJoined]             = useState(false);
-    const [micOn,        setMicOn]              = useState(true);
-    const [camOn,        setCamOn]              = useState(true);
-    const [screenOn,     setScreenOn]           = useState(false);
-    const [handRaised,   setHandRaised]         = useState(false);
-    const [panelTab,     setPanelTab]           = useState(null);
-    const [messages,     setMessages]           = useState([]);
-    const [screenStream, setScreenStream]       = useState(null);
-    const [msgText,      setMsgText]            = useState("");
-    const [msgCounter,   setMsgCounter]         = useState(1);
-    const [seconds,      setSeconds]            = useState(0);
-    const [calls, setCalls]                     = useState([]);
-    const [activeCall, setActiveCall]           = useState(null);
-    const [showSchedule, setShowSchedule]       = useState(false);
-    
-    // Scheduling states
-    const [sTitle, setSTitle]                   = useState('');
-    const [sProject, setSProject]               = useState('');
-    const [sDate, setSDate]                     = useState('');
-    const [sNotes, setSNotes]                   = useState('');
-    
-    // Waiting Room states
-    const [waitStatus, setWaitStatus]           = useState('idle'); // 'idle' | 'waiting' | 'denied' | 'host_missing'
-    const [admissionRequests, setAdmissionRequests] = useState([]); // Array of { studentId, name, initials, bg }
+    const { user } = useAuth();
+    const isInstructor = user?.role === "instructor";
 
-    // WebRTC & Socket states
-    const [peers, setPeers] = useState([]);
-    const [localStream, setLocalStream] = useState(null);
-    
-    const socketRef = useRef();
-    const userVideo = useRef();
-    const peersRef = useRef([]);
+    // ── Media states ────────────────────────────────────────────
+    const [localStream, setLocalStream]   = useState(null); // camera stream
+    const [screenStream, setScreenStream] = useState(null); // screen-capture stream
+    const [micOn, setMicOn]               = useState(true);
+    const [camOn, setCamOn]               = useState(true);
+    const [screenOn, setScreenOn]         = useState(false);
+    const [handRaised, setHandRaised]     = useState(false);
+
+    // ── Call flow ────────────────────────────────────────────────
+    const [joined, setJoined]         = useState(false);
+    const [waitStatus, setWaitStatus] = useState("idle"); // idle|waiting|denied|host_missing
+    const [peers, setPeers]           = useState([]);
+    const [focusedPeer, setFocusedPeer] = useState(null); // peerID to show large
+
+    // ── Room data ────────────────────────────────────────────────
+    const [calls, setCalls]               = useState([]);
+    const [activeCall, setActiveCall]     = useState(null);
+    const [admissionRequests, setAdmissionRequests] = useState([]);
+
+    // ── UI ───────────────────────────────────────────────────────
+    const [panelTab, setPanelTab]         = useState(null); // null | "chat" | "people"
+    const [messages, setMessages]         = useState([]);
+    const [msgText, setMsgText]           = useState("");
+    const [seconds, setSeconds]           = useState(0);
+    const [newMsgCount, setNewMsgCount]   = useState(0);
+    const [typingUsers, setTypingUsers]   = useState([]); // [{id, name}]
+    const [joinedAt, setJoinedAt]         = useState(null); // local user's join timestamp
+    const typingTimerRef                  = useRef(null);
+
+    // ── Scheduling ───────────────────────────────────────────────
+    const [showSchedule, setShowSchedule] = useState(false);
+    const [sTitle, setSTitle]             = useState("");
+    const [sProject, setSProject]         = useState("");
+    const [sDate, setSDate]               = useState("");
+    const [sNotes, setSNotes]             = useState("");
+
+    // ── Refs ─────────────────────────────────────────────────────
+    const socketRef  = useRef(null);
+    const peersRef   = useRef([]);
     const timerRef   = useRef(null);
     const chatEndRef = useRef(null);
-    const navigate   = useNavigate();
+    const localStreamRef = useRef(null); // always holds the latest localStream
 
-    // Fetch upcoming calls
+    const myInitials = getInitials(user?.name);
+    const myBg = "linear-gradient(135deg,#534AB7,#7F77DD)";
+
+    // ── Fetch calls on mount ─────────────────────────────────────
     useEffect(() => {
         const fetchCalls = async () => {
             try {
                 const res = await getCalls();
                 setCalls(res.data);
-                const active = res.data.find(c => c.status === 'live' || c.status === 'scheduled');
+                const active = res.data.find(c => c.status === "live" || c.status === "scheduled");
                 if (active) setActiveCall(active);
             } catch (err) {
-                console.error('Failed to load calls:', err);
+                console.error("Failed to load calls:", err);
             }
         };
         fetchCalls();
     }, []);
 
-    // Call duration timer
+    // ── Timer ────────────────────────────────────────────────────
     useEffect(() => {
-        if (joined && waitStatus === 'idle') {
+        if (joined && waitStatus === "idle") {
             timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
         }
         return () => clearInterval(timerRef.current);
     }, [joined, waitStatus]);
 
-    // Scroll chat to bottom
+    // ── Auto-scroll chat ──────────────────────────────────────────
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    const formatTime = (s) => {
-        const m   = String(Math.floor(s / 60)).padStart(2, "0");
-        const sec = String(s % 60).padStart(2, "0");
-        return `${m}:${sec}`;
-    };
+    // ── Track new messages when chat is closed ────────────────────
+    useEffect(() => {
+        if (panelTab === "chat") setNewMsgCount(0);
+    }, [panelTab]);
 
-    const getInitials = (name) => {
-        return name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() || "U";
-    };
+    // ── Keep localStreamRef in sync ───────────────────────────────
+    useEffect(() => {
+        localStreamRef.current = localStream;
+    }, [localStream]);
 
-    const myInitials = getInitials(user?.name);
-    const myBg = "linear-gradient(135deg,#534AB7,#7F77DD)";
-
-    // ─── WebRTC and Socket Connection ──────────────────────────────────────────
-    const startCall = () => {
-        if (!activeCall) return;
-        setJoined(true);
-        if (user?.role !== 'instructor') {
-            setWaitStatus('waiting');
-        }
-        
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .catch(err => {
-            console.error("Failed to get local stream, falling back to empty stream", err);
-            // Fallback for local testing (webcam in use by another tab)
+    // ─── Create a safe dummy stream if getUserMedia fails (local testing) ──
+    const getSafeStream = async () => {
+        try {
+            return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch {
+            // Fallback: silent audio + blank canvas video
             const ctx = new AudioContext();
-            const oscillator = ctx.createOscillator();
+            const osc = ctx.createOscillator();
             const dst = ctx.createMediaStreamDestination();
-            oscillator.connect(dst);
-            oscillator.start();
-            // Create a fake video track using canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = 640; canvas.height = 480;
-            const canvasStream = canvas.captureStream(15); // 15 fps
+            osc.connect(dst);
+            osc.start();
+            const canvas = Object.assign(document.createElement("canvas"), { width: 640, height: 480 });
+            const canvasStream = canvas.captureStream(15);
             dst.stream.addTrack(canvasStream.getVideoTracks()[0]);
             return dst.stream;
-        })
-        .then(stream => {
-            setLocalStream(stream);
-            
-            // Adjust initial state of tracks
-            if (stream.getVideoTracks().length > 0) stream.getVideoTracks()[0].enabled = camOn;
-            if (stream.getAudioTracks().length > 0) stream.getAudioTracks()[0].enabled = micOn;
-
-            socketRef.current = io("http://localhost:3000", { withCredentials: true });
-            
-            // Emit join request
-            socketRef.current.emit("request join", {
-                roomID: activeCall._id,
-                role: user?.role,
-                name: user?.name,
-                initials: myInitials,
-                bg: myBg
-            });
-            
-            // Student waiting room responses
-            socketRef.current.on('admission approved', () => {
-                setWaitStatus('idle'); // clears waiting screen, shows video grid
-            });
-            
-            socketRef.current.on('admission denied', () => {
-                setWaitStatus('denied');
-            });
-            
-            socketRef.current.on('host missing', () => {
-                setWaitStatus('host_missing');
-            });
-            
-            // Instructor waiting room events
-            socketRef.current.on('admission request', (req) => {
-                setAdmissionRequests(prev => [...prev, req]);
-            });
-
-            // Normal WebRTC events
-            socketRef.current.on("all users", users => {
-                const peersArr = [];
-                users.forEach(userID => {
-                    const peer = createPeer(userID, socketRef.current.id, stream);
-                    peersRef.current.push({
-                        peerID: userID,
-                        peer,
-                        camOn: true,
-                        micOn: true,
-                        name: "Connecting...",
-                        initials: "...",
-                        bg: "#888",
-                        role: "Student"
-                    });
-                    peersArr.push({
-                        peerID: userID,
-                        peer,
-                        camOn: true,
-                        micOn: true,
-                        name: "Connecting...",
-                        initials: "...",
-                        bg: "#888",
-                        role: "Student"
-                    });
-                });
-                setPeers(peersArr);
-            });
-
-            socketRef.current.on("user joined", payload => {
-                const peer = addPeer(payload.signal, payload.callerID, stream);
-                const newPeerObj = {
-                    peerID: payload.callerID,
-                    peer,
-                    camOn: true,
-                    micOn: true,
-                    isScreenSharing: false,
-                    handRaised: false,
-                    name: payload.callerName || "Participant",
-                    initials: payload.callerInitials || "P",
-                    bg: payload.callerBg || "#1D9E75",
-                    role: payload.callerRole || "Student"
-                };
-                peersRef.current.push(newPeerObj);
-                setPeers(users => [...users, newPeerObj]);
-
-                // System message
-                setMessages(prev => [...prev, {
-                    id: Date.now(),
-                    text: `${newPeerObj.name} joined the call`,
-                    isSystem: true
-                }]);
-            });
-
-            socketRef.current.on("receiving returned signal", payload => {
-                const item = peersRef.current.find(p => p.peerID === payload.id);
-                if (item) item.peer.signal(payload.signal);
-            });
-
-            socketRef.current.on("new message", message => {
-                setMessages(prev => [...prev, message]);
-            });
-
-            socketRef.current.on("user toggled media", payload => {
-                setPeers(users => users.map(p => {
-                    if (p.peerID === payload.id) {
-                        return { ...p, camOn: payload.camOn, micOn: payload.micOn };
-                    }
-                    return p;
-                }));
-                const item = peersRef.current.find(p => p.peerID === payload.id);
-                if (item) {
-                    item.camOn = payload.camOn;
-                    item.micOn = payload.micOn;
-                }
-            });
-
-            socketRef.current.on("user toggled screen share", payload => {
-                setPeers(users => users.map(p => {
-                    if (p.peerID === payload.id) return { ...p, isScreenSharing: payload.isScreenSharing };
-                    return p;
-                }));
-                const item = peersRef.current.find(p => p.peerID === payload.id);
-                if (item) item.isScreenSharing = payload.isScreenSharing;
-            });
-
-            socketRef.current.on("user raised hand", payload => {
-                setPeers(users => users.map(p => {
-                    if (p.peerID === payload.id) return { ...p, handRaised: payload.handRaised };
-                    return p;
-                }));
-                const item = peersRef.current.find(p => p.peerID === payload.id);
-                if (item) item.handRaised = payload.handRaised;
-            });
-
-            socketRef.current.on("user left", id => {
-                const peerObj = peersRef.current.find(p => p.peerID === id);
-                if (peerObj) {
-                    peerObj.peer.destroy();
-                    // System message
-                    setMessages(prev => [...prev, {
-                        id: Date.now(),
-                        text: `${peerObj.name} left the call`,
-                        isSystem: true
-                    }]);
-                }
-                const peersCopy = peersRef.current.filter(p => p.peerID !== id);
-                peersRef.current = peersCopy;
-                setPeers(peersCopy);
-            });
-        });
+        }
     };
 
-    function createPeer(userToSignal, callerID, stream) {
-        const peer = new Peer({
-            initiator: true,
-            trickle: false,
-            stream,
-        });
+    // ─── Peer creation helpers ─────────────────────────────────────────────
+    const addPeerToState = useCallback((peerObj) => {
+        peersRef.current.push(peerObj);
+        setPeers(prev => [...prev, peerObj]);
+    }, []);
 
+    const createPeer = useCallback((userToSignal, callerID, stream) => {
+        const peer = new Peer({ initiator: true, trickle: false, stream });
         peer.on("signal", signal => {
-            socketRef.current.emit("sending signal", {
-                userToSignal,
-                callerID,
-                signal,
+            socketRef.current?.emit("sending signal", {
+                userToSignal, callerID, signal,
                 callerName: user?.name,
                 callerInitials: myInitials,
                 callerBg: myBg,
-                callerRole: user?.role === 'instructor' ? 'Instructor' : 'Student'
+                callerRole: user?.role,
             });
         });
-
-        // Store remote stream inside the peer object when it arrives
-        peer.on('stream', remoteStream => {
+        peer.on("stream", remoteStream => {
             peer.remoteStream = remoteStream;
-            // Force re-render to attach the stream to the VideoTile
-            setPeers(users => [...users]); 
+            setPeers(prev => [...prev]); // force re-render
         });
-
+        peer.on("error", err => console.warn("Peer error (initiator):", err.message));
         return peer;
-    }
+    }, [user, myInitials, myBg]);
 
-    function addPeer(incomingSignal, callerID, stream) {
-        const peer = new Peer({
-            initiator: false,
-            trickle: false,
-            stream,
-        });
-
+    const addPeer = useCallback((incomingSignal, callerID, stream) => {
+        const peer = new Peer({ initiator: false, trickle: false, stream });
         peer.on("signal", signal => {
-            socketRef.current.emit("returning signal", { signal, callerID });
+            socketRef.current?.emit("returning signal", { signal, callerID });
         });
-
-        peer.signal(incomingSignal);
-
-        peer.on('stream', remoteStream => {
+        peer.on("stream", remoteStream => {
             peer.remoteStream = remoteStream;
-            setPeers(users => [...users]);
+            setPeers(prev => [...prev]);
         });
-
+        peer.on("error", err => console.warn("Peer error (receiver):", err.message));
+        peer.signal(incomingSignal);
         return peer;
-    }
+    }, []);
 
-    const sendMessage = () => {
-        if (!msgText.trim()) return;
-        
-        const messageData = {
-            id:       msgCounter,
-            roomID:   activeCall._id,
-            sender:   user?.name || "You",
+    // ─── Push a system message into chat ──────────────────────────────────
+    const pushSystem = useCallback((text) => {
+        setMessages(prev => [...prev, { id: Date.now() + Math.random(), text, isSystem: true }]);
+        setNewMsgCount(c => c + 1);
+    }, []);
+
+    // ─── Main join handler ────────────────────────────────────────────────
+    const startCall = async () => {
+        if (!activeCall) return;
+        setJoined(true);
+        if (!isInstructor) setWaitStatus("waiting");
+
+        const stream = await getSafeStream();
+        setLocalStream(stream);
+        localStreamRef.current = stream;
+
+        stream.getVideoTracks().forEach(t => (t.enabled = camOn));
+        stream.getAudioTracks().forEach(t => (t.enabled = micOn));
+
+        const socket = io("http://localhost:3000", { withCredentials: true });
+        socketRef.current = socket;
+
+        socket.emit("request join", {
+            roomID: activeCall._id,
+            role: user?.role,
+            name: user?.name,
             initials: myInitials,
-            bg:       myBg,
-            text:     msgText.trim(),
-            mine:     false, // For others, it's not "mine"
-        };
-        
-        socketRef.current.emit("send message", messageData);
-        
-        // Add locally as "mine"
-        setMessages(prev => [...prev, { ...messageData, mine: true }]);
-        setMsgCounter(c => c + 1);
-        setMsgText("");
-    };
-
-    const toggleMic = () => {
-        if (localStream) {
-            const newMicOn = !micOn;
-            localStream.getAudioTracks()[0].enabled = newMicOn;
-            setMicOn(newMicOn);
-            if (socketRef.current) {
-                socketRef.current.emit("toggle media", { roomID: activeCall._id, micOn: newMicOn, camOn });
-            }
-        }
-    };
-
-    const toggleCam = () => {
-        if (localStream) {
-            const newCamOn = !camOn;
-            localStream.getVideoTracks()[0].enabled = newCamOn;
-            setCamOn(newCamOn);
-            if (socketRef.current) {
-                socketRef.current.emit("toggle media", { roomID: activeCall._id, micOn, camOn: newCamOn });
-            }
-        }
-    };
-
-    const toggleScreenShare = async () => {
-        if (!screenOn) {
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                setScreenStream(stream);
-                setScreenOn(true);
-                
-                const screenTrack = stream.getVideoTracks()[0];
-                
-                // Replace video track in all peers
-                peersRef.current.forEach(peerObj => {
-                    const currentVideoTrack = localStream.getVideoTracks()[0];
-                    peerObj.peer.replaceTrack(currentVideoTrack, screenTrack, localStream);
-                });
-                
-                // Update local video element
-                if (videoRef.current) videoRef.current.srcObject = stream;
-                
-                if (socketRef.current) socketRef.current.emit("screen share toggle", { roomID: activeCall._id, isScreenSharing: true });
-
-                // Revert when user clicks browser's built-in "Stop sharing" button
-                screenTrack.onended = () => {
-                    stopScreenShare();
-                };
-            } catch (err) {
-                console.error("Failed to share screen", err);
-            }
-        } else {
-            stopScreenShare();
-        }
-    };
-
-    const stopScreenShare = () => {
-        setScreenOn(false);
-        if (screenStream) {
-            screenStream.getTracks().forEach(t => t.stop());
-            setScreenStream(null);
-        }
-        
-        // Revert to camera track
-        const camTrack = localStream.getVideoTracks()[0];
-        peersRef.current.forEach(peerObj => {
-            const currentVideoTrack = screenStream ? screenStream.getVideoTracks()[0] : null;
-            if (currentVideoTrack) peerObj.peer.replaceTrack(currentVideoTrack, camTrack, localStream);
+            bg: myBg,
         });
-        
-        if (socketRef.current) socketRef.current.emit("screen share toggle", { roomID: activeCall._id, isScreenSharing: false });
+
+        // ── Waiting room ────────────────────────────────────────────
+        socket.on("admission approved", () => setWaitStatus("idle"));
+        socket.on("admission denied",   () => setWaitStatus("denied"));
+        socket.on("host missing",       () => setWaitStatus("host_missing"));
+        socket.on("admission request",  (req) => setAdmissionRequests(prev => [...prev, req]));
+
+        // Record when we joined
+        setJoinedAt(new Date());
+
+        // ── Existing users in room (sent after joining) ─────────────
+        socket.on("all users", (userIDs) => {
+            const newPeers = userIDs.map(uid => {
+                const peer = createPeer(uid, socket.id, stream);
+                const obj = {
+                    peerID: uid, peer,
+                    camOn: true, micOn: true,
+                    isScreenSharing: false, handRaised: false,
+                    name: "Connecting…", initials: "…",
+                    bg: "#555", role: "student",
+                    joinedAt: new Date(),
+                };
+                return obj;
+            });
+            peersRef.current = newPeers;
+            setPeers(newPeers);
+        });
+
+        // ── New participant arrives (fires on existing users) ────────
+        socket.on("user joined", (payload) => {
+            const peer = addPeer(payload.signal, payload.callerID, localStreamRef.current);
+            const obj = {
+                peerID: payload.callerID, peer,
+                camOn: true, micOn: true,
+                isScreenSharing: false, handRaised: false,
+                name: payload.callerName || "Participant",
+                initials: payload.callerInitials || "P",
+                bg: payload.callerBg || "#1D9E75",
+                role: payload.callerRole || "student",
+                joinedAt: new Date(),
+            };
+            peersRef.current = [...peersRef.current, obj];
+            setPeers(prev => [...prev, obj]);
+            pushSystem(`${obj.name} joined the call`);
+            // Auto-open people panel to show who joined
+            setPanelTab(pt => pt === null ? "people" : pt);
+        });
+
+        // ── Typing indicator ─────────────────────────────────────────
+        socket.on("user typing", ({ id, name, isTyping }) => {
+            setTypingUsers(prev =>
+                isTyping
+                    ? prev.some(u => u.id === id) ? prev : [...prev, { id, name }]
+                    : prev.filter(u => u.id !== id)
+            );
+        });
+
+        // ── ICE answer ───────────────────────────────────────────────
+        socket.on("receiving returned signal", (payload) => {
+            const item = peersRef.current.find(p => p.peerID === payload.id);
+            item?.peer?.signal(payload.signal);
+        });
+
+        // ── Chat ─────────────────────────────────────────────────────
+        socket.on("new message", (message) => {
+            // Ensure ts is always present (fallback to now if sender's clock differs)
+            const msg = { ...message, ts: message.ts || new Date().toISOString() };
+            setMessages(prev => [...prev, msg]);
+            setNewMsgCount(c => c + 1);
+        });
+
+        // ── Media toggles ─────────────────────────────────────────────
+        socket.on("user toggled media", ({ id, camOn: pCam, micOn: pMic }) => {
+            peersRef.current = peersRef.current.map(p =>
+                p.peerID === id ? { ...p, camOn: pCam, micOn: pMic } : p
+            );
+            setPeers(prev => prev.map(p =>
+                p.peerID === id ? { ...p, camOn: pCam, micOn: pMic } : p
+            ));
+        });
+
+        // ── Screen share toggle ───────────────────────────────────────
+        socket.on("user toggled screen share", ({ id, isScreenSharing }) => {
+            peersRef.current = peersRef.current.map(p =>
+                p.peerID === id ? { ...p, isScreenSharing } : p
+            );
+            setPeers(prev => prev.map(p =>
+                p.peerID === id ? { ...p, isScreenSharing } : p
+            ));
+            if (isScreenSharing) {
+                // Auto-focus the person who is sharing
+                setFocusedPeer(id);
+                setPanelTab(null);
+            } else {
+                setFocusedPeer(fid => (fid === id ? null : fid));
+            }
+        });
+
+        // ── Hand raise ────────────────────────────────────────────────
+        socket.on("user raised hand", ({ id, handRaised: hr }) => {
+            peersRef.current = peersRef.current.map(p =>
+                p.peerID === id ? { ...p, handRaised: hr } : p
+            );
+            setPeers(prev => prev.map(p =>
+                p.peerID === id ? { ...p, handRaised: hr } : p
+            ));
+        });
+
+        // ── Participant left ───────────────────────────────────────────
+        socket.on("user left", (id) => {
+            const leaving = peersRef.current.find(p => p.peerID === id);
+            if (leaving) {
+                leaving.peer?.destroy();
+                pushSystem(`${leaving.name} left the call`);
+            }
+            peersRef.current = peersRef.current.filter(p => p.peerID !== id);
+            setPeers(prev => prev.filter(p => p.peerID !== id));
+            setFocusedPeer(fid => (fid === id ? null : fid));
+        });
     };
 
-    const toggleHandRaise = () => {
-        const newHandRaised = !handRaised;
-        setHandRaised(newHandRaised);
-        if (socketRef.current) {
-            socketRef.current.emit("raise hand", { roomID: activeCall._id, handRaised: newHandRaised });
-        }
-    };
-
+    // ─── Leave call ────────────────────────────────────────────────────────
     const handleEndCall = () => {
         clearInterval(timerRef.current);
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-        }
-        if (socketRef.current) {
-            socketRef.current.disconnect();
-        }
-        peersRef.current.forEach(peerObj => peerObj.peer.destroy());
-        setPeers([]);
+        localStream?.getTracks().forEach(t => t.stop());
+        screenStream?.getTracks().forEach(t => t.stop());
+        socketRef.current?.disconnect();
+        peersRef.current.forEach(p => p.peer?.destroy());
         peersRef.current = [];
+        setPeers([]);
         setJoined(false);
-        setWaitStatus('idle');
+        setWaitStatus("idle");
         setAdmissionRequests([]);
         setSeconds(0);
         setScreenOn(false);
+        setScreenStream(null);
+        setHandRaised(false);
+        setMessages([]);
+        setFocusedPeer(null);
     };
-    
+
+    // ─── Media controls ────────────────────────────────────────────────────
+    const toggleMic = () => {
+        if (!localStream) return;
+        const next = !micOn;
+        localStream.getAudioTracks().forEach(t => (t.enabled = next));
+        setMicOn(next);
+        socketRef.current?.emit("toggle media", { roomID: activeCall._id, micOn: next, camOn });
+    };
+
+    const toggleCam = () => {
+        if (!localStream) return;
+        const next = !camOn;
+        localStream.getVideoTracks().forEach(t => (t.enabled = next));
+        setCamOn(next);
+        socketRef.current?.emit("toggle media", { roomID: activeCall._id, micOn, camOn: next });
+    };
+
+    // ─── Screen share — sends a SEPARATE stream to each peer ─────────────
+    // This is the correct approach: open a new peer connection with the screen
+    // stream so we don't break the camera feed for anyone.
+    // For simplicity (mesh model) we add a second "screen" video track via
+    // replaceTrack so that the remote peer's single stream shows the screen.
+    const toggleScreenShare = async () => {
+        if (screenOn) {
+            // Stop screen share
+            screenStream?.getTracks().forEach(t => t.stop());
+            setScreenStream(null);
+            setScreenOn(false);
+
+            // Revert all peers back to camera video track
+            const camTrack = localStream?.getVideoTracks()[0];
+            if (camTrack) {
+                peersRef.current.forEach(p => {
+                    try {
+                        // Find the current video sender and replace back
+                        const videoSenders = p.peer._pc?.getSenders?.() || [];
+                        const vs = videoSenders.find(s => s.track?.kind === "video");
+                        if (vs) vs.replaceTrack(camTrack);
+                    } catch (e) {
+                        console.warn("replaceTrack cam error", e);
+                    }
+                });
+            }
+
+            socketRef.current?.emit("screen share toggle", { roomID: activeCall._id, isScreenSharing: false });
+            setFocusedPeer(null);
+        } else {
+            try {
+                const ss = await navigator.mediaDevices.getDisplayMedia({
+                    video: { frameRate: 30, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    audio: false,
+                });
+                const screenTrack = ss.getVideoTracks()[0];
+                setScreenStream(ss);
+                setScreenOn(true);
+
+                // Replace video track on every existing peer connection
+                peersRef.current.forEach(p => {
+                    try {
+                        const videoSenders = p.peer._pc?.getSenders?.() || [];
+                        const vs = videoSenders.find(s => s.track?.kind === "video");
+                        if (vs) vs.replaceTrack(screenTrack);
+                    } catch (e) {
+                        console.warn("replaceTrack screen error", e);
+                    }
+                });
+
+                socketRef.current?.emit("screen share toggle", { roomID: activeCall._id, isScreenSharing: true });
+                setFocusedPeer("local");
+
+                // When the user clicks browser's "Stop sharing" button
+                screenTrack.onended = () => toggleScreenShare();
+            } catch (e) {
+                console.error("Screen share failed:", e);
+            }
+        }
+    };
+
+    const toggleHandRaise = () => {
+        const next = !handRaised;
+        setHandRaised(next);
+        socketRef.current?.emit("raise hand", { roomID: activeCall._id, handRaised: next });
+    };
+
     const handleApprove = (req) => {
-        socketRef.current.emit('approve join', { studentId: req.studentId, roomID: activeCall._id });
-        setAdmissionRequests(prev => prev.filter(r => r.studentId !== req.studentId));
-    };
-    
-    const handleDeny = (req) => {
-        socketRef.current.emit('deny join', { studentId: req.studentId });
+        socketRef.current?.emit("approve join", { studentId: req.studentId, roomID: activeCall._id });
         setAdmissionRequests(prev => prev.filter(r => r.studentId !== req.studentId));
     };
 
-    // ── Pre-join screen ──────────────────────────────────────────
+    const handleDeny = (req) => {
+        socketRef.current?.emit("deny join", { studentId: req.studentId });
+        setAdmissionRequests(prev => prev.filter(r => r.studentId !== req.studentId));
+    };
+
+    const sendMessage = () => {
+        if (!msgText.trim() || !socketRef.current) return;
+        const msg = {
+            id: Date.now(),
+            roomID: activeCall._id,
+            sender: user?.name || "You",
+            initials: myInitials,
+            bg: myBg,
+            text: msgText.trim(),
+            ts: new Date().toISOString(),
+        };
+        socketRef.current.emit("send message", msg);
+        // Stop typing indicator
+        socketRef.current.emit("typing", { roomID: activeCall._id, name: user?.name, isTyping: false });
+        clearTimeout(typingTimerRef.current);
+        setMessages(prev => [...prev, { ...msg, mine: true }]);
+        setMsgText("");
+    };
+
+    const handleMsgInput = (e) => {
+        setMsgText(e.target.value);
+        if (!socketRef.current || !activeCall) return;
+        socketRef.current.emit("typing", { roomID: activeCall._id, name: user?.name, isTyping: true });
+        clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => {
+            socketRef.current?.emit("typing", { roomID: activeCall._id, name: user?.name, isTyping: false });
+        }, 2000);
+    };
+
+    // ─── Layout helpers ────────────────────────────────────────────────────
+    const totalParticipants = peers.length + 1;
+
+    // Find which peer (if any) is screen sharing to give them the spotlight
+    const screenSharePeer = peers.find(p => p.isScreenSharing);
+    const spotlightPeerID = focusedPeer === "local" ? "local" : (focusedPeer || screenSharePeer?.peerID || null);
+
+    const getGridStyle = () => {
+        if (spotlightPeerID) {
+            // Spotlight mode: big main + strip on the right
+            return { display: "flex", gap: "12px" };
+        }
+        const cols = totalParticipants <= 1 ? 1 : totalParticipants <= 4 ? 2 : 3;
+        return { display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: "12px" };
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── PRE-JOIN SCREEN ──────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
     if (!joined) {
         return (
-            <div className="min-h-screen flex items-center justify-center" style={{ background: "#070710" }}>
-                <div
-                    className="w-72 rounded-2xl p-6 text-center"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.08)" }}
-                >
-                    <div
-                        className="w-full rounded-xl flex items-center justify-center mb-5 relative overflow-hidden"
-                        style={{ height: "150px", background: "linear-gradient(135deg,#12121f,#1a1a2e)" }}
-                    >
-                        <div
-                            className="absolute inset-0 pointer-events-none"
-                            style={{ background: "radial-gradient(circle at 60% 40%,rgba(127,119,221,0.15),transparent 65%)" }}
-                        />
-                        <div
-                            className="w-14 h-14 rounded-full flex items-center justify-center font-semibold text-white text-xl relative z-10"
-                            style={{ background: myBg }}
-                        >
+            <div style={{ minHeight: "100vh", background: "#07070f", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: "360px", borderRadius: "20px", padding: "28px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    {/* Header */}
+                    <div style={{ textAlign: "center", marginBottom: "24px" }}>
+                        <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: myBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: "1.6rem", fontWeight: 700, color: "#fff" }}>
                             {myInitials}
                         </div>
+                        <div style={{ color: "#fff", fontWeight: 600, fontSize: "15px" }}>{user?.name}</div>
+                        <div style={{ color: "rgba(255,255,255,0.35)", fontSize: "11px", marginTop: "2px" }}>
+                            {isInstructor ? "👑 Instructor · Host" : "Student"}
+                        </div>
                     </div>
 
-                    <h2 className="text-sm font-semibold text-white mb-1">Ready to join?</h2>
-                    <p className="text-xs mb-5" style={{ color: "rgba(255,255,255,0.3)" }}>
-                        {activeCall ? activeCall.title : 'No scheduled calls'} · {activeCall?.instructorName || 'Instructor'}
-                    </p>
-
-                    <div className="flex justify-center gap-3 mb-5">
+                    {/* Mic/Cam pre-toggles */}
+                    <div style={{ display: "flex", justifyContent: "center", gap: "12px", marginBottom: "24px" }}>
                         {[
-                            { icon: "ti-microphone", iconOff: "ti-microphone-off", state: micOn, set: setMicOn, label: "Toggle microphone" },
-                            { icon: "ti-video",      iconOff: "ti-video-off",      state: camOn, set: setCamOn, label: "Toggle camera"     },
+                            { on: micOn, setOn: setMicOn, iconOn: "ti-microphone", iconOff: "ti-microphone-off", label: "Mic" },
+                            { on: camOn, setOn: setCamOn, iconOn: "ti-video",       iconOff: "ti-video-off",       label: "Camera" },
                         ].map(c => (
-                            <button
-                                key={c.icon}
-                                onClick={() => c.set(!c.state)}
-                                aria-label={c.label}
-                                className="w-10 h-10 rounded-full flex items-center justify-center transition-all"
-                                style={{
-                                    background: c.state ? "rgba(255,255,255,0.07)" : "rgba(224,75,74,0.15)",
-                                    border: "0.5px solid rgba(255,255,255,0.1)", cursor: "pointer",
-                                }}
-                            >
-                                <i
-                                    className={`ti ${c.state ? c.icon : c.iconOff}`}
-                                    aria-hidden="true"
-                                    style={{ fontSize: "18px", color: c.state ? "rgba(255,255,255,0.5)" : "#E86C6B" }}
-                                />
+                            <button key={c.label} onClick={() => c.setOn(!c.on)} title={c.label}
+                                style={{ width: "48px", height: "48px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", background: c.on ? "rgba(127,119,221,0.15)" : "rgba(224,75,74,0.15)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <i className={`ti ${c.on ? c.iconOn : c.iconOff}`} style={{ fontSize: "20px", color: c.on ? "#AFA9EC" : "#E86C6B" }} />
                             </button>
                         ))}
                     </div>
 
+                    {/* Upcoming sessions */}
                     {calls.length > 0 && (
-                        <div className="mb-4 text-left">
-                            <div className="text-[10px] mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>UPCOMING SESSIONS</div>
-                            {calls.filter(c => c.status !== 'ended').slice(0, 3).map(c => (
-                                <div key={c._id}
-                                    onClick={() => setActiveCall(c)}
-                                    className="flex items-center gap-2 p-2 rounded-lg mb-1.5 cursor-pointer transition-all"
-                                    style={{
-                                        background: activeCall?._id === c._id ? 'rgba(127,119,221,0.12)' : 'rgba(255,255,255,0.03)',
-                                        border: activeCall?._id === c._id ? '0.5px solid rgba(127,119,221,0.3)' : '0.5px solid rgba(255,255,255,0.06)'
-                                    }}
-                                >
-                                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.status === 'live' ? '#1D9E75' : '#7F77DD' }} />
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-[11px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.7)' }}>{c.title}</div>
-                                        <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                                            {c.projectName} · {c.status === 'live' ? '🔴 Live now' : new Date(c.scheduledAt).toLocaleString()}
+                        <div style={{ marginBottom: "16px" }}>
+                            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+                                {isInstructor ? "Your Sessions" : "Available Sessions"}
+                            </div>
+                            {calls.filter(c => c.status !== "ended").slice(0, 4).map(c => (
+                                <div key={c._id} onClick={() => setActiveCall(c)}
+                                    style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "10px", marginBottom: "6px", cursor: "pointer", background: activeCall?._id === c._id ? "rgba(127,119,221,0.12)" : "rgba(255,255,255,0.03)", border: `1px solid ${activeCall?._id === c._id ? "rgba(127,119,221,0.35)" : "rgba(255,255,255,0.06)"}` }}>
+                                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", flexShrink: 0, background: c.status === "live" ? "#1D9E75" : "#7F77DD" }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.75)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</div>
+                                        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                                            {c.status === "live" ? "🔴 Live now" : new Date(c.scheduledAt).toLocaleString()}
                                         </div>
                                     </div>
+                                    {c.status === "live" && <span style={{ fontSize: "10px", color: "#1D9E75", fontWeight: 600 }}>JOIN</span>}
                                 </div>
                             ))}
                         </div>
                     )}
 
-                    {/* Instructor schedule button */}
-                    {user?.role === "instructor" && (
-                        <button
-                            onClick={() => setShowSchedule(true)}
-                            className="w-full py-2.5 rounded-xl text-xs font-medium mb-2 transition-all"
-                            style={{ background: "rgba(127,119,221,0.12)", border: "0.5px solid rgba(127,119,221,0.25)", color: "#AFA9EC", cursor: "pointer" }}
-                        >
-                            <i className="ti ti-calendar-plus mr-1.5" aria-hidden="true" />
-                            Schedule a call
+                    {/* Instructor-only: Schedule button */}
+                    {isInstructor && (
+                        <button onClick={() => setShowSchedule(true)}
+                            style={{ width: "100%", padding: "10px", borderRadius: "10px", background: "rgba(127,119,221,0.1)", border: "1px solid rgba(127,119,221,0.25)", color: "#AFA9EC", fontSize: "12px", cursor: "pointer", marginBottom: "10px", fontWeight: 500 }}>
+                            <i className="ti ti-calendar-plus" style={{ marginRight: "6px" }} />
+                            Schedule a new session
                         </button>
                     )}
 
-                    <button
-                        onClick={startCall}
-                        className="w-full py-3 rounded-xl font-medium text-sm text-white transition-all hover:opacity-90"
-                        style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer", opacity: activeCall ? 1 : 0.5 }}
-                        disabled={!activeCall}
-                    >
-                        Join call
+                    {/* Join button */}
+                    <button onClick={startCall} disabled={!activeCall}
+                        style={{ width: "100%", padding: "13px", borderRadius: "12px", background: activeCall ? "linear-gradient(135deg,#7F77DD,#1D9E75)" : "rgba(255,255,255,0.05)", color: "#fff", fontWeight: 600, fontSize: "14px", cursor: activeCall ? "pointer" : "not-allowed", border: "none", opacity: activeCall ? 1 : 0.5 }}>
+                        {isInstructor ? "🎙 Start Session" : "→ Join Session"}
                     </button>
-                </div>
-                {showSchedule && (
-                  <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)' }}
-                    onClick={e => { if (e.target === e.currentTarget) setShowSchedule(false); }}
-                  >
-                    <div className="w-80 rounded-2xl p-5" style={{ background: '#13131f', border: '0.5px solid rgba(255,255,255,0.1)' }}>
-                      <h2 className="text-sm font-medium text-white mb-4">Schedule a Call</h2>
-                      {[
-                        { label: 'Session title', val: sTitle, set: setSTitle, placeholder: 'e.g. Code Review Session' },
-                        { label: 'Project name', val: sProject, set: setSProject, placeholder: 'e.g. E-Commerce Platform' },
-                        { label: 'Notes', val: sNotes, set: setSNotes, placeholder: 'Optional agenda notes...' },
-                      ].map(f => (
-                        <div key={f.label}>
-                          <label className="block text-[11px] mb-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{f.label}</label>
-                          <input type="text" value={f.val} onChange={e => f.set(e.target.value)}
-                            placeholder={f.placeholder}
-                            className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none mb-3"
-                            style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}
-                          />
+
+                    {!activeCall && (
+                        <div style={{ textAlign: "center", marginTop: "10px", fontSize: "11px", color: "rgba(255,255,255,0.25)" }}>
+                            {isInstructor ? "Schedule a session above, then join it." : "No active session available yet. Wait for your instructor."}
                         </div>
-                      ))}
-                      <div key="date">
-                        <label className="block text-[11px] mb-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Date & Time</label>
-                        <input type="datetime-local" value={sDate} onChange={e => setSDate(e.target.value)}
-                          className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none mb-3"
-                          style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)', colorScheme: 'dark' }}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 mt-1">
-                        <button onClick={() => setShowSchedule(false)}
-                          className="py-2 rounded-lg text-xs"
-                          style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.4)', border: 'none', cursor: 'pointer' }}
-                        >Cancel</button>
-                        <button onClick={async () => {
-                          try {
-                            await scheduleCall({ title: sTitle, projectName: sProject, scheduledAt: sDate, notes: sNotes, duration: 60 });
-                            const res = await getCalls();
-                            setCalls(res.data);
-                            setShowSchedule(false);
-                            setSTitle(''); setSProject(''); setSDate(''); setSNotes('');
-                          } catch(err) { console.error('Failed to schedule:', err); }
-                        }}
-                          className="py-2 rounded-lg text-xs font-medium text-white"
-                          style={{ background: 'linear-gradient(135deg,#7F77DD,#1D9E75)', border: 'none', cursor: 'pointer' }}
-                        >Schedule</button>
-                      </div>
+                    )}
+                </div>
+
+                {/* Schedule Modal */}
+                {showSchedule && (
+                    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}
+                        onClick={e => { if (e.target === e.currentTarget) setShowSchedule(false); }}>
+                        <div style={{ width: "340px", borderRadius: "18px", padding: "24px", background: "#13131f", border: "1px solid rgba(255,255,255,0.1)" }}>
+                            <h2 style={{ color: "#fff", fontSize: "14px", fontWeight: 600, marginBottom: "16px" }}>Schedule a Session</h2>
+                            {[
+                                { label: "Session title", val: sTitle, set: setSTitle, placeholder: "e.g. Code Review Session" },
+                                { label: "Project name", val: sProject, set: setSProject, placeholder: "e.g. E-Commerce Platform" },
+                                { label: "Notes / Agenda", val: sNotes, set: setSNotes, placeholder: "Optional agenda notes…" },
+                            ].map(f => (
+                                <div key={f.label} style={{ marginBottom: "12px" }}>
+                                    <label style={{ display: "block", fontSize: "11px", color: "rgba(255,255,255,0.35)", marginBottom: "5px" }}>{f.label}</label>
+                                    <input value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.placeholder}
+                                        style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: "12px", outline: "none", boxSizing: "border-box" }} />
+                                </div>
+                            ))}
+                            <div style={{ marginBottom: "16px" }}>
+                                <label style={{ display: "block", fontSize: "11px", color: "rgba(255,255,255,0.35)", marginBottom: "5px" }}>Date & Time</label>
+                                <input type="datetime-local" value={sDate} onChange={e => setSDate(e.target.value)}
+                                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: "12px", outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                <button onClick={() => setShowSchedule(false)}
+                                    style={{ padding: "9px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "none", color: "rgba(255,255,255,0.4)", fontSize: "12px", cursor: "pointer" }}>
+                                    Cancel
+                                </button>
+                                <button onClick={async () => {
+                                    try {
+                                        await scheduleCall({ title: sTitle, projectName: sProject, scheduledAt: sDate, notes: sNotes, duration: 60 });
+                                        const res = await getCalls();
+                                        setCalls(res.data);
+                                        setShowSchedule(false);
+                                        setSTitle(""); setSProject(""); setSDate(""); setSNotes("");
+                                    } catch (e) { console.error(e); }
+                                }}
+                                    style={{ padding: "9px", borderRadius: "8px", background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                                    Schedule
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                  </div>
                 )}
             </div>
         );
     }
-    
-    // ── Waiting screen ──────────────────────────────────────────
-    if (waitStatus !== 'idle') {
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── WAITING ROOM (students only) ────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+    if (waitStatus !== "idle") {
+        const msgs = {
+            waiting: { icon: "ti-hourglass", title: "Waiting for host…", body: "The instructor will let you in shortly.", color: "#7F77DD" },
+            host_missing: { icon: "ti-alert-circle", title: "Host hasn't started yet", body: "The instructor hasn't joined. Please wait.", color: "#EF9F27" },
+            denied: { icon: "ti-ban", title: "Entry denied", body: "The instructor did not allow you to join.", color: "#E24B4A" },
+        };
+        const m = msgs[waitStatus] || msgs.waiting;
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center text-white" style={{ background: "#070710" }}>
-                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6 relative" style={{ background: "rgba(127,119,221,0.15)" }}>
-                    <i className="ti ti-loader animate-spin" style={{ fontSize: "28px", color: "#7F77DD" }}></i>
+            <div style={{ minHeight: "100vh", background: "#07070f", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: `${m.color}22`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "20px" }}>
+                    <i className={`ti ${m.icon}`} style={{ fontSize: "30px", color: m.color }} />
                 </div>
-                <h2 className="text-xl font-semibold mb-2">
-                    {waitStatus === 'waiting' && "Waiting for instructor..."}
-                    {waitStatus === 'host_missing' && "Instructor hasn't started the meeting yet"}
-                    {waitStatus === 'denied' && "Your request was denied"}
-                </h2>
-                <p className="text-sm opacity-60 mb-8 max-w-sm text-center">
-                    {waitStatus === 'waiting' && "You will be admitted automatically once the instructor approves your request."}
-                    {waitStatus === 'host_missing' && "Please wait. We will notify the instructor once they join."}
-                    {waitStatus === 'denied' && "You cannot join this call."}
-                </p>
-                <button
-                    onClick={handleEndCall}
-                    className="px-6 py-2.5 rounded-xl font-medium text-sm transition-all"
-                    style={{ background: "rgba(255,255,255,0.1)", border: "0.5px solid rgba(255,255,255,0.15)", cursor: "pointer" }}
-                >
-                    Leave waiting room
+                <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px" }}>{m.title}</h2>
+                <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", textAlign: "center", maxWidth: "300px", lineHeight: 1.5, marginBottom: "28px" }}>{m.body}</p>
+                <button onClick={handleEndCall}
+                    style={{ padding: "10px 24px", borderRadius: "10px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)", fontSize: "13px", cursor: "pointer" }}>
+                    Leave
                 </button>
             </div>
         );
     }
 
-    // ── In-call screen ───────────────────────────────────────────
-    
-    // Create grid layout depending on number of peers
-    const totalParticipants = peers.length + 1; // peers + local
-    const getGridCols = () => {
-        if (totalParticipants === 1) return "1fr";
-        if (totalParticipants === 2) return "1fr 1fr";
-        if (totalParticipants <= 4) return "1fr 1fr";
-        return "repeat(auto-fit, minmax(200px, 1fr))";
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── IN-CALL SCREEN ─────────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // Build the local participant descriptor
+    const localParticipant = {
+        name: user?.name,
+        initials: myInitials,
+        isLocal: true,
+        bg: myBg,
+        camOn,
+        micOn,
+        handRaised,
+        isScreenSharing: screenOn,
+        role: user?.role,
     };
 
+    // Current local video stream to render
+    const localDisplayStream = screenOn ? screenStream : localStream;
+
+    // All participants for the "people" panel
+    const allParticipants = [
+        { ...localParticipant, peerID: "local" },
+        ...peers,
+    ];
+
     return (
-        <div className="h-screen flex flex-col relative overflow-hidden" style={{ background: "#070710" }}>
-            <style>{`@keyframes speakPulse { 0%, 100% { opacity: 0.8; } 50% { opacity: 0.2; } }`}</style>
-            
-            {/* Instructor Admission Requests Overlay */}
-            {user?.role === 'instructor' && admissionRequests.length > 0 && (
-                <div className="absolute top-20 right-6 z-50 w-72 space-y-3">
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#07070f", color: "#fff", position: "relative", overflow: "hidden" }}>
+
+            {/* ── KEYFRAMES ─────────────────────────────────────────── */}
+            <style>{`
+                @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+                .vc-fadein { animation: fadeIn 0.25s ease forwards; }
+                @keyframes pulse2 { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+            `}</style>
+
+            {/* ── TOP BAR ──────────────────────────────────────────────── */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px", background: "rgba(7,7,16,0.9)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, zIndex: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#1D9E75", animation: "pulse2 1.5s ease infinite" }} />
+                    <div>
+                        <div style={{ fontSize: "13px", fontWeight: 600 }}>{activeCall?.title || "Session"}</div>
+                        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>UpgradeX · {activeCall?.instructorName}</div>
+                    </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>{formatDuration(seconds)}</span>
+                    <span style={{ fontSize: "11px", color: "#5DCAA5", fontWeight: 500 }}>● {totalParticipants} in call</span>
+                    {isInstructor && (
+                        <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "6px", background: "rgba(127,119,221,0.2)", color: "#AFA9EC", fontWeight: 600 }}>HOST</span>
+                    )}
+                </div>
+            </div>
+
+            {/* ── ADMISSION REQUESTS (instructor only) ──────────────── */}
+            {isInstructor && admissionRequests.length > 0 && (
+                <div style={{ position: "absolute", top: "60px", right: "16px", zIndex: 100, display: "flex", flexDirection: "column", gap: "8px" }}>
                     {admissionRequests.map(req => (
-                        <div key={req.studentId} className="p-4 rounded-xl shadow-2xl" style={{ background: "rgba(20,20,35,0.95)", border: "1px solid rgba(127,119,221,0.3)", backdropFilter: "blur(10px)" }}>
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-xs" style={{ background: req.bg || "#7F77DD" }}>
-                                    {req.initials}
-                                </div>
+                        <div key={req.studentId} className="vc-fadein"
+                            style={{ width: "280px", padding: "14px", borderRadius: "14px", background: "rgba(15,15,28,0.96)", border: "1px solid rgba(127,119,221,0.35)", backdropFilter: "blur(16px)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                                <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: req.bg || "#7F77DD", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>{req.initials}</div>
                                 <div>
-                                    <div className="text-sm font-medium text-white">{req.name}</div>
-                                    <div className="text-[10px] text-gray-400">wants to join</div>
+                                    <div style={{ fontSize: "13px", fontWeight: 600 }}>{req.name}</div>
+                                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>Wants to join the call</div>
                                 </div>
                             </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleDeny(req)} className="flex-1 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: "rgba(224,75,74,0.2)", border: "1px solid rgba(224,75,74,0.4)" }}>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                                <button onClick={() => handleDeny(req)}
+                                    style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(226,75,74,0.15)", border: "1px solid rgba(226,75,74,0.35)", color: "#E86C6B", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
                                     Deny
                                 </button>
-                                <button onClick={() => handleApprove(req)} className="flex-1 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: "#1D9E75", border: "none" }}>
-                                    Approve
+                                <button onClick={() => handleApprove(req)}
+                                    style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "#1D9E75", border: "none", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                                    Admit ✓
                                 </button>
                             </div>
                         </div>
@@ -759,233 +832,322 @@ export default function VideoCall() {
                 </div>
             )}
 
-            {/* Top bar */}
-            <div
-                className="flex items-center justify-between px-5 py-3 z-10 flex-shrink-0"
-                style={{ background: "linear-gradient(to bottom, rgba(7,7,16,0.92), transparent)", position: "absolute", top: 0, left: 0, right: 0 }}
-            >
-                <div>
-                    <div className="text-sm font-medium text-white">{activeCall?.projectName || 'Project'} · {activeCall?.title || 'Call'}</div>
-                    <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>UpgradeX Video Call</div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono px-3 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}>
-                        {formatTime(seconds)}
-                    </span>
-                    <div className="flex items-center gap-1.5 text-xs" style={{ color: "#5DCAA5" }}>
-                        <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#1D9E75" }} />
-                        {totalParticipants} in call
-                    </div>
-                </div>
-            </div>
+            {/* ── MAIN CONTENT (video + panel) ─────────────────────── */}
+            <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-            {/* Video grid */}
-            <div
-                className="flex-1 p-4 gap-3"
-                style={{ 
-                    display: "grid", 
-                    paddingTop: "64px", 
-                    paddingBottom: "88px", 
-                    gridTemplateColumns: getGridCols(), 
-                    gridAutoRows: "1fr" 
-                }}
-            >
-                {/* Local User */}
-                <div>
-                    <VideoTile 
-                        stream={screenOn ? screenStream : localStream}
-                        participant={{
-                            initials: myInitials,
-                            name: user?.name,
-                            isLocal: true,
-                            bg: myBg,
-                            camOn,
-                            micOn,
-                            handRaised,
-                            isScreenSharing: screenOn
-                        }} 
-                        large={totalParticipants <= 2}
-                    />
-                </div>
-                
-                {/* Remote Peers */}
-                {peers.map(peerObj => (
-                    <div key={peerObj.peerID}>
-                        <VideoTile 
-                            stream={peerObj.peer.remoteStream}
-                            participant={peerObj}
-                            large={totalParticipants <= 2}
-                        />
-                    </div>
-                ))}
-            </div>
+                {/* Video area */}
+                <div style={{ flex: 1, padding: "14px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
-            {/* Controls */}
-            <div
-                className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-3 px-6 pb-6 pt-10 z-10"
-                style={{ background: "linear-gradient(to top, rgba(7,7,16,0.95), transparent)" }}
-            >
-                <CtrlBtn icon="ti-microphone"   iconOff="ti-microphone-off" active={micOn}      onClick={toggleMic}         label="Toggle microphone" />
-                <CtrlBtn icon="ti-video"        iconOff="ti-video-off"      active={camOn}      onClick={toggleCam}         label="Toggle camera"     />
-                <CtrlBtn icon="ti-screen-share"                             active={screenOn}   onClick={toggleScreenShare} label="Share screen"      />
-                <CtrlBtn icon="ti-hand-stop"                                active={handRaised} onClick={toggleHandRaise}   label="Raise hand"        />
+                    {/* Spotlight mode */}
+                    {spotlightPeerID ? (
+                        <div style={{ display: "flex", gap: "10px", height: "100%" }}>
+                            {/* Large spotlight tile */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                {spotlightPeerID === "local" ? (
+                                    <VideoTile
+                                        stream={localDisplayStream}
+                                        participant={localParticipant}
+                                        isLarge={true}
+                                        isFocused={true}
+                                        onClick={() => setFocusedPeer(null)}
+                                    />
+                                ) : (
+                                    (() => {
+                                        const sp = peers.find(p => p.peerID === spotlightPeerID);
+                                        return sp ? (
+                                            <VideoTile
+                                                stream={sp.peer?.remoteStream}
+                                                participant={sp}
+                                                isLarge={true}
+                                                isFocused={true}
+                                                onClick={() => setFocusedPeer(null)}
+                                            />
+                                        ) : null;
+                                    })()
+                                )}
+                            </div>
 
-                <button
-                    onClick={() => setPanelTab(panelTab === "chat" ? null : "chat")}
-                    aria-label="Chat"
-                    className="flex items-center justify-center w-11 h-11 rounded-full transition-all relative"
-                    style={{ background: panelTab === "chat" ? "rgba(127,119,221,0.25)" : "rgba(255,255,255,0.1)", border: "none", cursor: "pointer" }}
-                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
-                    onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-                >
-                    <i className="ti ti-message" aria-hidden="true" style={{ fontSize: "20px", color: panelTab === "chat" ? "#AFA9EC" : "rgba(255,255,255,0.7)" }} />
-                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: "#7F77DD", border: "1.5px solid #070710" }} />
-                </button>
-
-                <button
-                    onClick={() => setPanelTab(panelTab === "people" ? null : "people")}
-                    aria-label="Participants"
-                    className="flex items-center justify-center w-11 h-11 rounded-full transition-all"
-                    style={{ background: panelTab === "people" ? "rgba(127,119,221,0.25)" : "rgba(255,255,255,0.1)", border: "none", cursor: "pointer" }}
-                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
-                    onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-                >
-                    <i className="ti ti-users" aria-hidden="true" style={{ fontSize: "20px", color: panelTab === "people" ? "#AFA9EC" : "rgba(255,255,255,0.7)" }} />
-                </button>
-
-                <button
-                    onClick={handleEndCall}
-                    aria-label="End call"
-                    className="flex items-center justify-center rounded-full transition-all"
-                    style={{ width: "52px", height: "52px", background: "#E24B4A", border: "none", cursor: "pointer" }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.08)"; e.currentTarget.style.background = "#C73B3B"; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)";   e.currentTarget.style.background = "#E24B4A"; }}
-                >
-                    <i className="ti ti-phone-off" aria-hidden="true" style={{ fontSize: "22px", color: "#fff" }} />
-                </button>
-            </div>
-
-            {/* Side panel */}
-            <div
-                className="absolute right-0 top-0 bottom-0 flex flex-col z-20 transition-transform duration-300"
-                style={{
-                    width: "260px",
-                    background: "rgba(10,10,20,0.98)",
-                    borderLeft: "0.5px solid rgba(255,255,255,0.07)",
-                    transform: panelTab ? "translateX(0)" : "translateX(100%)",
-                }}
-            >
-                <div className="flex flex-shrink-0" style={{ borderBottom: "0.5px solid rgba(255,255,255,0.07)" }}>
-                    {["chat", "people"].map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setPanelTab(tab)}
-                            className="flex-1 py-3 text-xs capitalize transition-all"
-                            style={{
-                                background: "transparent", border: "none",
-                                borderBottom: panelTab === tab ? "1.5px solid #7F77DD" : "1.5px solid transparent",
-                                color: panelTab === tab ? "#AFA9EC" : "rgba(255,255,255,0.3)", cursor: "pointer",
-                            }}
-                        >
-                            {tab === "people" ? `People (${totalParticipants})` : "Chat"}
-                        </button>
-                    ))}
-                    <button
-                        onClick={() => setPanelTab(null)}
-                        aria-label="Close panel"
-                        style={{ background: "none", border: "none", padding: "0 12px", color: "rgba(255,255,255,0.25)", cursor: "pointer", fontSize: "16px" }}
-                    >
-                        ✕
-                    </button>
+                            {/* Thumbnail strip */}
+                            <div style={{ width: "160px", display: "flex", flexDirection: "column", gap: "8px", overflowY: "auto" }}>
+                                {/* Local thumb (only if not in spotlight) */}
+                                {spotlightPeerID !== "local" && (
+                                    <div style={{ height: "100px", flexShrink: 0 }}>
+                                        <VideoTile
+                                            stream={localDisplayStream}
+                                            participant={localParticipant}
+                                            isFocused={false}
+                                            onClick={() => setFocusedPeer("local")}
+                                        />
+                                    </div>
+                                )}
+                                {peers.filter(p => p.peerID !== spotlightPeerID).map(p => (
+                                    <div key={p.peerID} style={{ height: "100px", flexShrink: 0 }}>
+                                        <VideoTile
+                                            stream={p.peer?.remoteStream}
+                                            participant={p}
+                                            isFocused={false}
+                                            onClick={() => setFocusedPeer(p.peerID)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        // Grid mode
+                        <div style={{ ...getGridStyle(), height: "100%" }}>
+                            <VideoTile
+                                stream={localDisplayStream}
+                                participant={localParticipant}
+                                isLarge={totalParticipants === 1}
+                                isFocused={false}
+                                onClick={() => setFocusedPeer("local")}
+                            />
+                            {peers.map(p => (
+                                <VideoTile
+                                    key={p.peerID}
+                                    stream={p.peer?.remoteStream}
+                                    participant={p}
+                                    isLarge={totalParticipants === 2}
+                                    isFocused={false}
+                                    onClick={() => setFocusedPeer(p.peerID)}
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
 
-                {panelTab === "chat" && (
-                    <>
-                        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                            {messages.map(m => (
-                                <div key={m.id} className={m.isSystem ? "flex justify-center my-2" : `flex gap-2 ${m.mine ? "flex-row-reverse" : ""}`}>
-                                    {m.isSystem ? (
-                                        <div className="text-[10px] italic px-3 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)" }}>
-                                            {m.text}
-                                        </div>
+                {/* ── SIDE PANEL ──────────────────────────────────────── */}
+                {panelTab && (
+                    <div className="vc-fadein" style={{ width: "300px", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", flexShrink: 0, background: "#0e0e1a" }}>
+
+                        {/* Panel header tabs */}
+                        <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, padding: "0 4px" }}>
+                            {["people", "chat"].map(tab => (
+                                <button key={tab} onClick={() => { setPanelTab(tab); if (tab === "chat") setNewMsgCount(0); }}
+                                    style={{ flex: 1, padding: "14px 0 12px", fontSize: "12px", background: "none", border: "none", borderBottom: panelTab === tab ? "2px solid #7F77DD" : "2px solid transparent", color: panelTab === tab ? "#AFA9EC" : "rgba(255,255,255,0.3)", cursor: "pointer", fontWeight: panelTab === tab ? 600 : 400, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", position: "relative" }}>
+                                    {tab === "people" ? (
+                                        <><i className="ti ti-users" style={{ fontSize: "14px" }} /> People <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "99px", background: panelTab === tab ? "rgba(127,119,221,0.3)" : "rgba(255,255,255,0.08)", color: panelTab === tab ? "#AFA9EC" : "rgba(255,255,255,0.35)" }}>{totalParticipants}</span></>
                                     ) : (
-                                        <>
-                                            {!m.mine && (
-                                                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold text-white flex-shrink-0 mt-0.5" style={{ background: m.bg }}>
-                                                    {m.initials}
+                                        <><i className="ti ti-message" style={{ fontSize: "14px" }} /> Chat {newMsgCount > 0 && panelTab !== "chat" && <span style={{ position: "absolute", top: "10px", right: "20px", width: "16px", height: "16px", borderRadius: "50%", background: "#7F77DD", fontSize: "9px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>{newMsgCount}</span>}</>
+                                    )}
+                                </button>
+                            ))}
+                            <button onClick={() => setPanelTab(null)}
+                                style={{ padding: "0 14px", background: "none", border: "none", color: "rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "18px", lineHeight: 1 }}>✕</button>
+                        </div>
+
+                        {/* ═══ PEOPLE TAB ═══════════════════════════════════ */}
+                        {panelTab === "people" && (
+                            <div style={{ flex: 1, overflowY: "auto", padding: "12px 10px" }}>
+
+                                {/* Section: In this call */}
+                                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px", padding: "0 4px" }}>
+                                    In this call — {totalParticipants}
+                                </div>
+
+                                {allParticipants.map((p, idx) => {
+                                    const isHost = p.role === "instructor";
+                                    const joinTime = p.isLocal ? joinedAt : p.joinedAt;
+                                    const joinStr = joinTime ? joinTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
+                                    return (
+                                        <div key={p.peerID} className="vc-fadein"
+                                            style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 10px", borderRadius: "10px", marginBottom: "4px", background: p.isLocal ? "rgba(127,119,221,0.06)" : "rgba(255,255,255,0.02)", border: `1px solid ${p.isLocal ? "rgba(127,119,221,0.15)" : "rgba(255,255,255,0.04)"}`, transition: "background 0.2s" }}>
+
+                                            {/* Avatar with online dot */}
+                                            <div style={{ position: "relative", flexShrink: 0 }}>
+                                                <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: p.bg || myBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "#fff", border: isHost ? "2px solid rgba(127,119,221,0.6)" : "2px solid transparent" }}>
+                                                    {p.initials}
                                                 </div>
-                                            )}
-                                            <div className={`max-w-[80%] flex flex-col ${m.mine ? "items-end" : "items-start"}`}>
-                                                {!m.mine && <div className="text-[10px] mb-0.5 ml-1" style={{ color: "rgba(255,255,255,0.3)" }}>{m.sender}</div>}
-                                                <div
-                                                    className="px-3 py-1.5 text-xs leading-relaxed"
-                                                    style={{
-                                                        background:   m.mine ? "rgba(127,119,221,0.2)" : "rgba(255,255,255,0.06)",
-                                                        borderRadius: m.mine ? "9px 0 9px 9px" : "0 9px 9px 9px",
-                                                        color: "rgba(255,255,255,0.75)",
-                                                    }}
-                                                >
-                                                    {m.text}
+                                                {/* Online indicator */}
+                                                <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", background: "#1D9E75", border: "2px solid #0e0e1a" }} />
+                                            </div>
+
+                                            {/* Name + role + join time */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                                    <span style={{ fontSize: "12px", fontWeight: 600, color: p.isLocal ? "#AFA9EC" : "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "110px" }}>
+                                                        {p.name}
+                                                    </span>
+                                                    {p.isLocal && <span style={{ fontSize: "9px", color: "rgba(127,119,221,0.8)", background: "rgba(127,119,221,0.12)", padding: "1px 5px", borderRadius: "4px" }}>YOU</span>}
+                                                    {isHost && <span style={{ fontSize: "9px", color: "#EF9F27", background: "rgba(239,159,39,0.12)", padding: "1px 5px", borderRadius: "4px" }}>HOST</span>}
+                                                </div>
+                                                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", marginTop: "1px" }}>
+                                                    {isHost ? "Instructor" : "Student"}{joinStr && ` · joined ${joinStr}`}
                                                 </div>
                                             </div>
-                                        </>
-                                    )}
-                                </div>
-                            ))}
-                            <div ref={chatEndRef} />
-                        </div>
-                        <div className="flex-shrink-0 p-3 flex gap-2" style={{ borderTop: "0.5px solid rgba(255,255,255,0.07)" }}>
-                            <input
-                                type="text"
-                                value={msgText}
-                                onChange={e => setMsgText(e.target.value)}
-                                onKeyDown={e => e.key === "Enter" && sendMessage()}
-                                placeholder="Message..."
-                                className="flex-1 rounded-lg px-3 py-2 text-xs text-white outline-none"
-                                style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
-                            />
-                            <button onClick={sendMessage} aria-label="Send message" className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "rgba(127,119,221,0.2)", border: "none", cursor: "pointer" }}>
-                                <i className="ti ti-send" aria-hidden="true" style={{ fontSize: "14px", color: "#AFA9EC" }} />
-                            </button>
-                        </div>
-                    </>
-                )}
 
-                {panelTab === "people" && (
-                    <div className="flex-1 overflow-y-auto p-3">
-                        {/* Self */}
-                        <div className="flex items-center gap-2.5 p-2.5 rounded-xl mb-2" style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.05)" }}>
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0" style={{ background: myBg }}>{myInitials}</div>
-                            <div className="flex-1 min-w-0">
-                                <div className="text-xs font-medium truncate" style={{ color: "rgba(255,255,255,0.7)" }}>{user?.name} (You)</div>
-                                <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>{user?.role === 'instructor' ? 'Instructor' : 'Student'}</div>
+                                            {/* Status icons */}
+                                            <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                                                {p.handRaised && (
+                                                    <span title="Hand raised" style={{ fontSize: "14px", animation: "pulse2 1s ease infinite" }}>✋</span>
+                                                )}
+                                                {p.isScreenSharing && (
+                                                    <div title="Sharing screen" style={{ width: "22px", height: "22px", borderRadius: "6px", background: "rgba(127,119,221,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                        <i className="ti ti-screen-share" style={{ fontSize: "11px", color: "#AFA9EC" }} />
+                                                    </div>
+                                                )}
+                                                <div title={p.micOn !== false ? "Mic on" : "Muted"} style={{ width: "22px", height: "22px", borderRadius: "6px", background: p.micOn !== false ? "rgba(29,158,117,0.15)" : "rgba(226,75,74,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                    <i className={`ti ${p.micOn !== false ? "ti-microphone" : "ti-microphone-off"}`} style={{ fontSize: "11px", color: p.micOn !== false ? "#1D9E75" : "#E86C6B" }} />
+                                                </div>
+                                                <div title={p.camOn !== false ? "Cam on" : "Cam off"} style={{ width: "22px", height: "22px", borderRadius: "6px", background: p.camOn !== false ? "rgba(29,158,117,0.15)" : "rgba(226,75,74,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                    <i className={`ti ${p.camOn !== false ? "ti-video" : "ti-video-off"}`} style={{ fontSize: "11px", color: p.camOn !== false ? "#1D9E75" : "#E86C6B" }} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                            <div className="flex items-center gap-1.5">
-                                {handRaised && <span className="text-sm mr-1">✋</span>}
-                                {!micOn && <i className="ti ti-microphone-off" aria-hidden="true" style={{ fontSize: "13px", color: "#E86C6B" }} />}
-                            </div>
-                        </div>
-                        {/* Remote Peers */}
-                        {peers.map(p => (
-                            <div key={p.peerID} className="flex items-center gap-2.5 p-2.5 rounded-xl mb-2" style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.05)" }}>
-                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0" style={{ background: p.bg }}>{p.initials}</div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-xs font-medium truncate" style={{ color: "rgba(255,255,255,0.7)" }}>{p.name}</div>
-                                    <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>{p.role}</div>
+                        )}
+
+                        {/* ═══ CHAT TAB ═════════════════════════════════════ */}
+                        {panelTab === "chat" && (
+                            <>
+                                {/* Messages area */}
+                                <div style={{ flex: 1, overflowY: "auto", padding: "12px 10px", display: "flex", flexDirection: "column", gap: "2px" }}>
+                                    {messages.length === 0 && (
+                                        <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                                            <div style={{ fontSize: "28px", marginBottom: "8px" }}>💬</div>
+                                            <div style={{ color: "rgba(255,255,255,0.25)", fontSize: "12px" }}>No messages yet</div>
+                                            <div style={{ color: "rgba(255,255,255,0.15)", fontSize: "11px", marginTop: "4px" }}>Be the first to say something!</div>
+                                        </div>
+                                    )}
+
+                                    {messages.map((m, idx) => {
+                                        const prev = messages[idx - 1];
+                                        // Group consecutive messages from same sender (not system)
+                                        const isGrouped = prev && !prev.isSystem && !m.isSystem &&
+                                            prev.sender === m.sender && prev.mine === m.mine &&
+                                            (new Date(m.ts) - new Date(prev.ts)) < 60000; // within 1 min
+                                        const timeStr = m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+
+                                        if (m.isSystem) {
+                                            return (
+                                                <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "8px", margin: "8px 0" }}>
+                                                    <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.06)" }} />
+                                                    <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap", fontStyle: "italic" }}>{m.text}</span>
+                                                    <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.06)" }} />
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div key={m.id} style={{ display: "flex", flexDirection: m.mine ? "row-reverse" : "row", gap: "8px", alignItems: "flex-end", marginTop: isGrouped ? "2px" : "10px" }}>
+                                                {/* Avatar — only show on first of a group */}
+                                                <div style={{ width: "28px", flexShrink: 0, display: "flex", alignItems: "flex-end" }}>
+                                                    {!m.mine && !isGrouped ? (
+                                                        <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: m.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontWeight: 700, color: "#fff" }}>
+                                                            {m.initials}
+                                                        </div>
+                                                    ) : <div style={{ width: "28px" }} />}
+                                                </div>
+
+                                                {/* Bubble */}
+                                                <div style={{ maxWidth: "76%", display: "flex", flexDirection: "column", alignItems: m.mine ? "flex-end" : "flex-start" }}>
+                                                    {/* Sender name — only on first of group */}
+                                                    {!m.mine && !isGrouped && (
+                                                        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", marginBottom: "3px", paddingLeft: "4px" }}>{m.sender}</div>
+                                                    )}
+                                                    <div style={{ display: "flex", alignItems: "flex-end", gap: "5px", flexDirection: m.mine ? "row-reverse" : "row" }}>
+                                                        <div style={{
+                                                            padding: "8px 12px",
+                                                            borderRadius: m.mine
+                                                                ? (isGrouped ? "12px 4px 4px 12px" : "12px 4px 12px 12px")
+                                                                : (isGrouped ? "4px 12px 12px 4px" : "4px 12px 12px 12px"),
+                                                            background: m.mine ? "linear-gradient(135deg,rgba(127,119,221,0.4),rgba(127,119,221,0.25))" : "rgba(255,255,255,0.08)",
+                                                            fontSize: "12px",
+                                                            color: "rgba(255,255,255,0.9)",
+                                                            lineHeight: 1.5,
+                                                            wordBreak: "break-word",
+                                                            border: m.mine ? "1px solid rgba(127,119,221,0.3)" : "1px solid rgba(255,255,255,0.07)"
+                                                        }}>
+                                                            {m.text}
+                                                        </div>
+                                                        {/* Timestamp on hover simulation — always visible as tiny text */}
+                                                        <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.2)", flexShrink: 0, paddingBottom: "2px" }}>{timeStr}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    <div ref={chatEndRef} />
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    {p.handRaised && <span className="text-sm mr-1">✋</span>}
-                                    {!p.micOn && <i className="ti ti-microphone-off" aria-hidden="true" style={{ fontSize: "13px", color: "#E86C6B" }} />}
+
+                                {/* Typing indicator */}
+                                {typingUsers.length > 0 && (
+                                    <div style={{ padding: "4px 14px", fontSize: "10px", color: "rgba(255,255,255,0.35)", fontStyle: "italic", flexShrink: 0 }}>
+                                        {typingUsers.map(u => u.name).join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing
+                                        <span style={{ display: "inline-flex", gap: "2px", marginLeft: "4px", verticalAlign: "middle" }}>
+                                            {[0,1,2].map(i => <span key={i} style={{ width: "4px", height: "4px", borderRadius: "50%", background: "rgba(255,255,255,0.4)", display: "inline-block", animation: `pulse2 1.2s ease ${i * 0.2}s infinite` }} />)}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Quick emoji row */}
+                                <div style={{ display: "flex", gap: "4px", padding: "6px 10px 0", flexShrink: 0 }}>
+                                    {["👍","❤️","😂","🔥","👏","🙌"].map(emoji => (
+                                        <button key={emoji} onClick={() => setMsgText(t => t + emoji)}
+                                            style={{ fontSize: "15px", padding: "3px 5px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.03)", cursor: "pointer", lineHeight: 1 }}>
+                                            {emoji}
+                                        </button>
+                                    ))}
                                 </div>
-                            </div>
-                        ))}
+
+                                {/* Input row */}
+                                <div style={{ padding: "8px 10px 10px", display: "flex", gap: "8px", flexShrink: 0 }}>
+                                    <input
+                                        value={msgText}
+                                        onChange={handleMsgInput}
+                                        onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                                        placeholder="Message the group…"
+                                        style={{ flex: 1, padding: "9px 13px", borderRadius: "10px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: "12px", outline: "none" }}
+                                    />
+                                    <button onClick={sendMessage} disabled={!msgText.trim()}
+                                        style={{ width: "36px", height: "36px", borderRadius: "10px", background: msgText.trim() ? "rgba(127,119,221,0.35)" : "rgba(255,255,255,0.04)", border: "none", cursor: msgText.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.2s" }}>
+                                        <i className="ti ti-send" style={{ fontSize: "15px", color: msgText.trim() ? "#AFA9EC" : "rgba(255,255,255,0.2)" }} />
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
 
-            {panelTab && (
-                <div className="absolute inset-0 z-10" onClick={() => setPanelTab(null)} style={{ right: "260px" }} />
-            )}
+            {/* ── BOTTOM CONTROLS ──────────────────────────────────────── */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "12px 20px", background: "rgba(7,7,16,0.92)", backdropFilter: "blur(12px)", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, zIndex: 20 }}>
+
+                <CtrlBtn icon="ti-microphone"  iconOff="ti-microphone-off" active={micOn}      onClick={toggleMic}         label="Toggle microphone" />
+                <CtrlBtn icon="ti-video"       iconOff="ti-video-off"      active={camOn}      onClick={toggleCam}         label="Toggle camera" />
+                <CtrlBtn icon="ti-screen-share" iconOff="ti-screen-share-off" active={screenOn} onClick={toggleScreenShare} label="Share screen" />
+                <CtrlBtn icon="ti-hand-stop"                               active={handRaised} onClick={toggleHandRaise}   label={handRaised ? "Lower hand" : "Raise hand"} />
+
+                {/* Divider */}
+                <div style={{ width: "1px", height: "28px", background: "rgba(255,255,255,0.1)", margin: "0 4px" }} />
+
+                <CtrlBtn
+                    icon="ti-message" iconOff="ti-message"
+                    active={panelTab === "chat"}
+                    onClick={() => { setPanelTab(panelTab === "chat" ? null : "chat"); setNewMsgCount(0); }}
+                    label="Chat"
+                    badge={panelTab !== "chat" ? newMsgCount : 0}
+                />
+                <CtrlBtn
+                    icon="ti-users" iconOff="ti-users"
+                    active={panelTab === "people"}
+                    onClick={() => setPanelTab(panelTab === "people" ? null : "people")}
+                    label="Participants"
+                />
+
+                {/* Divider */}
+                <div style={{ width: "1px", height: "28px", background: "rgba(255,255,255,0.1)", margin: "0 4px" }} />
+
+                {/* End call */}
+                <button onClick={handleEndCall} title="End call"
+                    style={{ width: "52px", height: "52px", borderRadius: "14px", background: "#E24B4A", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#c73b3b"}
+                    onMouseLeave={e => e.currentTarget.style.background = "#E24B4A"}>
+                    <i className="ti ti-phone-off" style={{ fontSize: "22px", color: "#fff" }} />
+                </button>
+            </div>
         </div>
     );
 }

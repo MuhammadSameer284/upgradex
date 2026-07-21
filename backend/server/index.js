@@ -132,10 +132,12 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Chat Messages
+    // Chat Messages — frontend emits the full message object as the payload
     socket.on('send message', payload => {
-        // Broadcast message to everyone in the room except sender
-        socket.to(payload.roomID).emit('new message', payload.message);
+        // Broadcast to everyone in the room except sender
+        // The payload IS the message object (has roomID, text, sender, etc.)
+        const { roomID, ...message } = payload;
+        socket.to(roomID).emit('new message', message);
     });
     
     // Toggle Media state
@@ -163,7 +165,18 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Typing indicator
+    socket.on('typing', payload => {
+        socket.to(payload.roomID).emit('user typing', {
+            id: socket.id,
+            name: payload.name,
+            isTyping: payload.isTyping
+        });
+    });
+
     socket.on('disconnect', () => {
+        // Clear typing indicator if they were typing
+        socket.broadcast.emit('user typing', { id: socket.id, name: '', isTyping: false });
         // Broadcast disconnection so clients can remove the peer
         socket.broadcast.emit('user left', socket.id);
     });
