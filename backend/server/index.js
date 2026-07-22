@@ -125,7 +125,8 @@ io.on('connection', (socket) => {
             callerName: payload.callerName,
             callerInitials: payload.callerInitials,
             callerBg: payload.callerBg,
-            callerRole: payload.callerRole
+            callerRole: payload.callerRole,
+            callerUserId: payload.callerUserId
         });
     });
 
@@ -137,7 +138,8 @@ io.on('connection', (socket) => {
             responderName: payload.responderName,
             responderInitials: payload.responderInitials,
             responderBg: payload.responderBg,
-            responderRole: payload.responderRole
+            responderRole: payload.responderRole,
+            responderUserId: payload.responderUserId
         });
     });
 
@@ -181,6 +183,10 @@ io.on('connection', (socket) => {
             name: payload.name,
             isTyping: payload.isTyping
         });
+    });
+
+    socket.on('end call', payload => {
+        socket.to(payload.roomID).emit('call ended');
     });
 
     socket.on('disconnect', () => {

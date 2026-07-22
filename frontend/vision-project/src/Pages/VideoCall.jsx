@@ -200,20 +200,48 @@ export default function VideoCall() {
     const myInitials = getInitials(user?.name);
     const myBg = "linear-gradient(135deg,#534AB7,#7F77DD)";
 
+    const [shouldAutoJoin, setShouldAutoJoin] = useState(false);
+
     // ── Fetch calls on mount ─────────────────────────────────────
     useEffect(() => {
         const fetchCalls = async () => {
             try {
                 const res = await getCalls();
                 setCalls(res.data);
-                const active = res.data.find(c => c.status === "live" || c.status === "scheduled");
-                if (active) setActiveCall(active);
+                
+                // Read from sessionStorage to auto-rejoin
+                const persistedJoined = sessionStorage.getItem("upgradex_call_joined") === "true";
+                const persistedCallId = sessionStorage.getItem("upgradex_active_call_id");
+                
+                let active = null;
+                if (persistedJoined && persistedCallId) {
+                    active = res.data.find(c => c._id === persistedCallId);
+                }
+                
+                if (!active) {
+                    active = res.data.find(c => c.status === "live" || c.status === "scheduled");
+                }
+                
+                if (active) {
+                    setActiveCall(active);
+                    if (persistedJoined && persistedCallId === active._id) {
+                        setShouldAutoJoin(true);
+                    }
+                }
             } catch (err) {
                 console.error("Failed to load calls:", err);
             }
         };
         fetchCalls();
     }, []);
+
+    // ── Auto-join on refresh if set ──────────────────────────────
+    useEffect(() => {
+        if (shouldAutoJoin && activeCall) {
+            setShouldAutoJoin(false);
+            startCall(activeCall);
+        }
+    }, [shouldAutoJoin, activeCall]);
 
     // ── Timer ────────────────────────────────────────────────────
     useEffect(() => {
@@ -271,6 +299,7 @@ export default function VideoCall() {
                 callerInitials: myInitials,
                 callerBg: myBg,
                 callerRole: user?.role,
+                callerUserId: user?.id || user?._id,
             });
         });
         peer.on("stream", remoteStream => {
@@ -290,7 +319,8 @@ export default function VideoCall() {
                 responderName: user?.name,
                 responderInitials: myInitials,
                 responderBg: myBg,
-                responderRole: user?.role
+                responderRole: user?.role,
+                responderUserId: user?.id || user?._id,
             });
         });
         peer.on("stream", remoteStream => {
@@ -309,10 +339,14 @@ export default function VideoCall() {
     }, []);
 
     // ─── Main join handler ────────────────────────────────────────────────
-    const startCall = async () => {
-        if (!activeCall) return;
+    const startCall = async (callToJoin) => {
+        const targetCall = (callToJoin && callToJoin._id) ? callToJoin : activeCall;
+        if (!targetCall) return;
         setJoined(true);
         if (!isInstructor) setWaitStatus("waiting");
+
+        sessionStorage.setItem("upgradex_call_joined", "true");
+        sessionStorage.setItem("upgradex_active_call_id", targetCall._id);
 
         const stream = await getSafeStream();
         setLocalStream(stream);
@@ -325,7 +359,7 @@ export default function VideoCall() {
         socketRef.current = socket;
 
         socket.emit("request join", {
-            roomID: activeCall._id,
+            roomID: targetCall._id,
             role: user?.role,
             name: user?.name,
             initials: myInitials,
@@ -341,7 +375,7 @@ export default function VideoCall() {
         socket.on("host arrived", () => {
             // Re-request join since host has arrived
             socket.emit("request join", {
-                roomID: activeCall._id,
+                roomID: targetCall._id,
                 role: user?.role,
                 name: user?.name,
                 initials: myInitials,
@@ -364,6 +398,7 @@ export default function VideoCall() {
                     name: "Connecting…", initials: "…",
                     bg: "#555", role: "student",
                     joinedAt: new Date(),
+                    userId: null,
                 };
                 return obj;
             });
@@ -373,16 +408,23 @@ export default function VideoCall() {
 
         // ── New participant arrives (fires on existing users) ────────
         socket.on("user joined", (payload) => {
-            const existing = peersRef.current.find(p => p.peerID === payload.callerID);
+            const existing = peersRef.current.find(p => p.userId === payload.callerUserId || p.peerID === payload.callerID);
             if (existing) {
-                // If it already exists, this is a trickle ICE candidate. Signal it!
-                existing.peer.signal(payload.signal);
-                return;
+                // If it already exists and is a trickle ICE candidate, signal it
+                if (existing.peerID === payload.callerID) {
+                    existing.peer.signal(payload.signal);
+                    return;
+                }
+                // If it's a new socket connection for the SAME user database ID (refresh), clean up the old one!
+                existing.peer?.destroy();
+                peersRef.current = peersRef.current.filter(p => p.userId !== payload.callerUserId);
             }
 
             const peer = addPeer(payload.signal, payload.callerID, localStreamRef.current);
             const obj = {
-                peerID: payload.callerID, peer,
+                peerID: payload.callerID,
+                userId: payload.callerUserId,
+                peer,
                 camOn: true, micOn: true,
                 isScreenSharing: false, handRaised: false,
                 name: payload.callerName || "Participant",
@@ -411,6 +453,16 @@ export default function VideoCall() {
         socket.on("receiving returned signal", (payload) => {
             const item = peersRef.current.find(p => p.peerID === payload.id);
             if (item) {
+                item.userId = payload.responderUserId;
+                
+                // Clean up any duplicate peer with the same userId (a hanging socket ID from before refresh)
+                const duplicateIndex = peersRef.current.findIndex(p => p.userId === payload.responderUserId && p.peerID !== payload.id);
+                if (duplicateIndex !== -1) {
+                    const dup = peersRef.current[duplicateIndex];
+                    dup.peer?.destroy();
+                    peersRef.current = peersRef.current.filter((p, idx) => idx !== duplicateIndex);
+                }
+
                 item.peer.signal(payload.signal);
                 // Also update the responder's profile details so they are not "Connecting..."
                 if (payload.responderName) {
@@ -418,8 +470,8 @@ export default function VideoCall() {
                     item.initials = payload.responderInitials;
                     item.bg = payload.responderBg;
                     item.role = payload.responderRole;
-                    setPeers(prev => [...prev]); // force re-render
                 }
+                setPeers([...peersRef.current]); // force re-render
             }
         });
 
@@ -479,10 +531,33 @@ export default function VideoCall() {
             setPeers(prev => prev.filter(p => p.peerID !== id));
             setFocusedPeer(fid => (fid === id ? null : fid));
         });
+
+        socket.on("call ended", () => {
+            alert("The host has ended this call session.");
+            handleEndCall();
+        });
+    };
+
+    // ─── Terminate call (Host only) ────────────────────────────────────────
+    const handleHostTerminateCall = async () => {
+        if (window.confirm("Are you sure you want to end this call for everyone?")) {
+            try {
+                await endCall(activeCall._id);
+                socketRef.current?.emit("end call", { roomID: activeCall._id });
+                setCalls(prev => prev.filter(c => c._id !== activeCall._id));
+                setActiveCall(null);
+            } catch (err) {
+                console.error("Failed to terminate call:", err);
+            }
+            handleEndCall();
+        }
     };
 
     // ─── Leave call ────────────────────────────────────────────────────────
     const handleEndCall = () => {
+        sessionStorage.removeItem("upgradex_call_joined");
+        sessionStorage.removeItem("upgradex_active_call_id");
+
         clearInterval(timerRef.current);
         localStream?.getTracks().forEach(t => t.stop());
         screenStream?.getTracks().forEach(t => t.stop());
@@ -1193,7 +1268,7 @@ export default function VideoCall() {
                 <div style={{ width: "1px", height: "28px", background: "rgba(255,255,255,0.1)", margin: "0 4px" }} />
 
                 {/* End call */}
-                <button onClick={handleEndCall} title="End call"
+                <button onClick={isInstructor ? handleHostTerminateCall : handleEndCall} title="End call"
                     style={{ width: "52px", height: "52px", borderRadius: "14px", background: "#E24B4A", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#c73b3b"}
                     onMouseLeave={e => e.currentTarget.style.background = "#E24B4A"}>

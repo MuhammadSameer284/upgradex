@@ -306,10 +306,20 @@ export default function Kanban() {
     }, []);
 
     useEffect(() => {
-        const filteredTasks = allTasks.filter(t => selectedProject === "All" || t.project === selectedProject);
+        let filteredTasks = allTasks.filter(t => selectedProject === "All" || t.project === selectedProject);
+        
+        if (activeFilter === "High priority") {
+            filteredTasks = filteredTasks.filter(t => t.priority === "high");
+        } else if (activeFilter === "This week") {
+            filteredTasks = filteredTasks.filter(t => t.due && t.due !== "No date" && t.due !== "No due date");
+        } else if (activeFilter === "My tasks") {
+            const myInitials = user?.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'SA';
+            filteredTasks = filteredTasks.filter(t => t.assignee === myInitials || !t.assignee);
+        }
+
         const mapped = getMappedColumns(filteredTasks);
         setColumns(mapped);
-    }, [allTasks, selectedProject]);
+    }, [allTasks, selectedProject, activeFilter, user]);
 
     // ── Drag end handler ─────────────────────────────────────────
     const onDragEnd = async (result) => {

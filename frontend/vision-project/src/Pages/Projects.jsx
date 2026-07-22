@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getProjects, createProject, updateProject } from "../config/projectService.jsx";
+import { getProjects, createProject, updateProject, deleteProject } from "../config/projectService.jsx";
 import { useAuth } from "../Context/authContext.jsx";
 
 // ─── Static Data (later this comes from your backend API) ────────
@@ -199,7 +199,7 @@ function ProjectCard({ project, view, onClick, userRole }) {
             >
                 {/* Member avatars */}
                 <div className="flex">
-                    {project.members.map((m, i) => (
+                    {project.members && project.members.map((m, i) => (
                         <div
                             key={i}
                             className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-semibold text-white"
@@ -246,6 +246,15 @@ export default function Projects() {
     const [mTech, setMTech] = useState("");
     const [mShared, setMShared] = useState(false);
 
+    // Edit state
+    const [editProject, setEditProject] = useState(null);
+    const [eName, setEName] = useState("");
+    const [eDesc, setEDesc] = useState("");
+    const [eTech, setETech] = useState("");
+    const [eStatus, setEStatus] = useState("active");
+    const [eProgress, setEProgress] = useState(0);
+    const [eShared, setEShared] = useState(false);
+
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -285,6 +294,49 @@ export default function Projects() {
             setShowModal(false);
         } catch (err) {
             console.error("Failed to create project:", err);
+        }
+    };
+
+    // ── Select Project for Editing ─────────────────────────────────
+    const handleSelectProject = (p) => {
+        setEditProject(p);
+        setEName(p.name);
+        setEDesc(p.desc || "");
+        setETech(p.tech ? p.tech.join(", ") : "");
+        setEStatus(p.status || "active");
+        setEProgress(p.progress || 0);
+        setEShared(p.isShared || false);
+    };
+
+    // ── Update Project ─────────────────────────────────────────────
+    const handleUpdate = async () => {
+        if (!eName.trim()) return;
+        const tech = eTech.split(",").map(t => t.trim()).filter(Boolean);
+        try {
+            const res = await updateProject(editProject._id, {
+                name: eName.trim(),
+                desc: eDesc.trim(),
+                tech: tech.length ? tech : ["React"],
+                status: eStatus,
+                progress: eStatus === "completed" ? 100 : Number(eProgress),
+                isShared: eShared
+            });
+            setProjects(prev => prev.map(p => p._id === editProject._id ? res.data : p));
+            setEditProject(null);
+        } catch (err) {
+            console.error("Failed to update project:", err);
+        }
+    };
+
+    // ── Delete Project ─────────────────────────────────────────────
+    const handleDelete = async () => {
+        if (!window.confirm("Are you sure you want to delete this project?")) return;
+        try {
+            await deleteProject(editProject._id);
+            setProjects(prev => prev.filter(p => p._id !== editProject._id));
+            setEditProject(null);
+        } catch (err) {
+            console.error("Failed to delete project:", err);
         }
     };
 
@@ -408,7 +460,7 @@ export default function Projects() {
                             project={p}
                             view={view}
                             userRole={user?.role}
-                            onClick={() => navigate(`/projects`)}
+                            onClick={() => handleSelectProject(p)}
                         />
                     ))}
                 </div>
@@ -489,6 +541,146 @@ export default function Projects() {
                     </div>
                 </div>
             )}
+
+            {/* ── Edit/View Project Modal ── */}
+            {editProject && (() => {
+                const isOwner = editProject.userId === user?.id || editProject.userId === user?._id;
+                return (
+                    <div
+                        className="fixed inset-0 flex items-center justify-center z-50"
+                        style={{ background: "rgba(0,0,0,0.65)" }}
+                        onClick={e => { if (e.target === e.currentTarget) setEditProject(null); }}
+                    >
+                        <div
+                            className="w-80 rounded-2xl p-5"
+                            style={{ background: "#12121f", border: "0.5px solid rgba(255,255,255,0.1)" }}
+                        >
+                            <h2 className="text-sm font-medium text-white mb-4">
+                                {isOwner ? "Edit Project" : "Project Details"}
+                            </h2>
+
+                            {/* Title & Desc */}
+                            <label className="block text-[11px] mb-1" style={{ color: "rgba(255,255,255,0.35)" }}>Project name</label>
+                            <input
+                                type="text"
+                                value={eName}
+                                onChange={e => setEName(e.target.value)}
+                                disabled={!isOwner}
+                                className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none mb-3"
+                                style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)", opacity: isOwner ? 1 : 0.6 }}
+                            />
+
+                            <label className="block text-[11px] mb-1" style={{ color: "rgba(255,255,255,0.35)" }}>Description</label>
+                            <textarea
+                                value={eDesc}
+                                onChange={e => setEDesc(e.target.value)}
+                                disabled={!isOwner}
+                                className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none mb-3 h-16 resize-none"
+                                style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)", opacity: isOwner ? 1 : 0.6 }}
+                            />
+
+                            <label className="block text-[11px] mb-1" style={{ color: "rgba(255,255,255,0.35)" }}>Tech stack (comma separated)</label>
+                            <input
+                                type="text"
+                                value={eTech}
+                                onChange={e => setETech(e.target.value)}
+                                disabled={!isOwner}
+                                className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none mb-3"
+                                style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)", opacity: isOwner ? 1 : 0.6 }}
+                            />
+
+                            {/* Status & Progress (only editable by owner, not completed/assigned unless owner) */}
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                <div>
+                                    <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Status</label>
+                                    <select
+                                        value={eStatus}
+                                        onChange={e => setEStatus(e.target.value)}
+                                        disabled={!isOwner}
+                                        className="w-full rounded-lg px-2 py-2 text-xs text-white outline-none"
+                                        style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)", opacity: isOwner ? 1 : 0.6 }}
+                                    >
+                                        <option value="active" style={{ background: "#12121f" }}>Active</option>
+                                        <option value="review" style={{ background: "#12121f" }}>In Review</option>
+                                        <option value="completed" style={{ background: "#12121f" }}>Completed</option>
+                                    </select>
+                                </div>
+                                {eStatus !== "completed" && (
+                                    <div>
+                                        <label className="block text-[11px] mb-1" style={{ color: "rgba(255,255,255,0.35)" }}>Progress: {eProgress}%</label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="100"
+                                            value={eProgress}
+                                            onChange={e => setEProgress(e.target.value)}
+                                            disabled={!isOwner}
+                                            className="w-full mt-2"
+                                            style={{ opacity: isOwner ? 1 : 0.6 }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Instructor only: Share option */}
+                            {isOwner && user?.role === 'instructor' && (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>Share with all students</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEShared(!eShared)}
+                                        style={{
+                                            width: '38px', height: '22px', borderRadius: '99px', border: 'none', cursor: 'pointer',
+                                            background: eShared ? 'rgba(29,158,117,0.5)' : 'rgba(255,255,255,0.1)',
+                                            position: 'relative', flexShrink: 0
+                                        }}
+                                    >
+                                        <div style={{
+                                            position: 'absolute', width: '16px', height: '16px', borderRadius: '50%',
+                                            top: '3px', left: eShared ? '19px' : '3px',
+                                            background: eShared ? '#1D9E75' : '#fff',
+                                            transition: 'left 0.2s'
+                                        }} />
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Footer Buttons */}
+                            <div className="grid grid-cols-2 gap-2 mt-4">
+                                <button
+                                    onClick={() => setEditProject(null)}
+                                    className="py-2 rounded-lg text-xs font-medium"
+                                    style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "none", cursor: "pointer" }}
+                                >
+                                    Close
+                                </button>
+                                {isOwner ? (
+                                    <button
+                                        onClick={handleUpdate}
+                                        className="py-2 rounded-lg text-xs font-medium text-white hover:opacity-90"
+                                        style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
+                                    >
+                                        Save Changes
+                                    </button>
+                                ) : (
+                                    <div />
+                                )}
+                            </div>
+
+                            {/* Owner only delete button */}
+                            {isOwner && (
+                                <button
+                                    onClick={handleDelete}
+                                    className="w-full mt-2 py-2 rounded-lg text-xs font-medium text-white transition-all hover:bg-opacity-80"
+                                    style={{ background: "rgba(226,75,74,0.15)", border: "1px solid rgba(226,75,74,0.3)", color: "#E24B4A", cursor: "pointer" }}
+                                >
+                                    Delete Project
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

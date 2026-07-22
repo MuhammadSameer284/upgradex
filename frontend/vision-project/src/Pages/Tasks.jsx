@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../Context/authContext.jsx";
-import { getTasks, createTask, updateTask } from "../config/taskService.jsx";
+import { getTasks, createTask, updateTask, deleteTask } from "../config/taskService.jsx";
 import { getProjects } from "../config/projectService.jsx";
 import { getInstructorDashboard } from "../config/dashboardService.jsx";
 
@@ -29,11 +29,12 @@ const STATUS_STYLES = {
 };
 
 // ─── Task Row ─────────────────────────────────────────────────────
-function TaskRow({ task, onToggle }) {
+function TaskRow({ task, onToggle, onClick }) {
     const status = STATUS_STYLES[task.status];
 
     return (
         <div
+            onClick={onClick}
             className="flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all cursor-pointer"
             style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(127,119,221,0.25)"; e.currentTarget.style.background = "rgba(127,119,221,0.04)"; }}
@@ -41,7 +42,7 @@ function TaskRow({ task, onToggle }) {
         >
             {/* Checkbox */}
             <button
-                onClick={() => onToggle(task._id)}
+                onClick={(e) => { e.stopPropagation(); onToggle(task._id); }}
                 aria-label={task.done ? "Mark incomplete" : "Mark complete"}
                 className="w-[18px] h-[18px] rounded-md flex items-center justify-center flex-shrink-0 transition-all"
                 style={{
@@ -294,6 +295,14 @@ export default function Tasks() {
     const [mPriority, setMPriority] = useState("med");
     const [mDue,      setMDue]      = useState("");
 
+    // Edit state
+    const [editTask,      setEditTask]      = useState(null);
+    const [eTaskName,     setETaskName]     = useState("");
+    const [eTaskProject,  setETaskProject]  = useState("E-Commerce Platform");
+    const [eTaskPriority, setETaskPriority] = useState("med");
+    const [eTaskDue,      setETaskDue]      = useState("");
+    const [eTaskStatus,   setETaskStatus]   = useState("To Do");
+
     const projectOptions = [
         { name: "E-Commerce Platform", color: "#7F77DD" },
         { name: "Student Portal API",  color: "#1D9E75" },
@@ -363,6 +372,52 @@ export default function Tasks() {
             }));
         } catch (err) {
             console.error("Failed to toggle task:", err);
+        }
+    };
+
+    // ── Select Task for Editing ───────────────────────────────────
+    const handleSelectTask = (t) => {
+        setEditTask(t);
+        setETaskName(t.name);
+        setETaskProject(t.project);
+        setETaskPriority(t.priority || "med");
+        setETaskDue(t.due || "");
+        setETaskStatus(t.status || "To Do");
+    };
+
+    // ── Update Task ───────────────────────────────────────────────
+    const handleUpdateTask = async () => {
+        if (!eTaskName.trim()) return;
+        const proj = projects.find(p => p.name === eTaskProject) || projectOptions.find(p => p.name === eTaskProject) || { color: "#7F77DD" };
+        const projColor = proj.barColor || proj.color || "#7F77DD";
+        const isDone = eTaskStatus === "Done";
+
+        try {
+            const res = await updateTask(editTask._id, {
+                name: eTaskName.trim(),
+                project: eTaskProject,
+                projColor,
+                due: eTaskDue || "No date",
+                priority: eTaskPriority,
+                status: eTaskStatus,
+                done: isDone
+            });
+            setTasks(prev => prev.map(t => t._id === editTask._id ? res.data : t));
+            setEditTask(null);
+        } catch (err) {
+            console.error("Failed to update task:", err);
+        }
+    };
+
+    // ── Delete Task ───────────────────────────────────────────────
+    const handleDeleteTask = async () => {
+        if (!window.confirm("Are you sure you want to delete this task?")) return;
+        try {
+            await deleteTask(editTask._id);
+            setTasks(prev => prev.filter(t => t._id !== editTask._id));
+            setEditTask(null);
+        } catch (err) {
+            console.error("Failed to delete task:", err);
         }
     };
 
@@ -488,7 +543,7 @@ export default function Tasks() {
             ) : (
                 <div className="flex flex-col gap-1.5">
                     {visible.map(t => (
-                        <TaskRow key={t._id} task={t} onToggle={toggleDone} />
+                        <TaskRow key={t._id} task={t} onToggle={toggleDone} onClick={() => handleSelectTask(t)} />
                     ))}
                 </div>
             )}
@@ -563,6 +618,92 @@ export default function Tasks() {
                                 Create task
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Edit/View Task Modal ── */}
+            {editTask && (
+                <div
+                    className="fixed inset-0 flex items-center justify-center z-50"
+                    style={{ background: "rgba(0,0,0,0.65)" }}
+                    onClick={e => { if (e.target === e.currentTarget) setEditTask(null); }}
+                >
+                    <div
+                        className="w-80 rounded-2xl p-5"
+                        style={{ background: "#12121f", border: "0.5px solid rgba(255,255,255,0.1)" }}
+                    >
+                        <h2 className="text-sm font-medium text-white mb-4">Edit Task</h2>
+
+                        <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Task name</label>
+                        <input
+                            type="text"
+                            value={eTaskName}
+                            onChange={e => setETaskName(e.target.value)}
+                            className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none mb-3"
+                            style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+                        />
+
+                        <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Project</label>
+                        <CustomDropdown
+                            options={projects.length > 0 ? projects.map(p => p.name) : projectOptions.map(p => p.name)}
+                            value={eTaskProject}
+                            onChange={setETaskProject}
+                        />
+
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Priority</label>
+                                <CustomDropdown
+                                    options={["High", "Medium", "Low"]}
+                                    value={eTaskPriority === "high" ? "High" : eTaskPriority === "med" ? "Medium" : "Low"}
+                                    onChange={v => setETaskPriority(v === "High" ? "high" : v === "Medium" ? "med" : "low")}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Due date</label>
+                                <input
+                                    type="text"
+                                    value={eTaskDue}
+                                    onChange={e => setETaskDue(e.target.value)}
+                                    placeholder="e.g. Jun 20"
+                                    className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none"
+                                    style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+                                />
+                            </div>
+                        </div>
+
+                        <label className="block text-[11px] mb-1.5" style={{ color: "rgba(255,255,255,0.35)" }}>Status</label>
+                        <CustomDropdown
+                            options={["Backlog", "To Do", "In Progress", "Done"]}
+                            value={eTaskStatus}
+                            onChange={setETaskStatus}
+                        />
+
+                        <div className="grid grid-cols-2 gap-2 mt-4">
+                            <button
+                                onClick={() => setEditTask(null)}
+                                className="py-2 rounded-lg text-xs font-medium"
+                                style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "none", cursor: "pointer" }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUpdateTask}
+                                className="py-2 rounded-lg text-xs font-medium text-white hover:opacity-90"
+                                style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
+                            >
+                                Save Changes
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={handleDeleteTask}
+                            className="w-full mt-2 py-2 rounded-lg text-xs font-medium text-white transition-all hover:bg-opacity-80"
+                            style={{ background: "rgba(226,75,74,0.15)", border: "1px solid rgba(226,75,74,0.3)", color: "#E24B4A", cursor: "pointer" }}
+                        >
+                            Delete Task
+                        </button>
                     </div>
                 </div>
             )}
