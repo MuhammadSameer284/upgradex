@@ -60,6 +60,9 @@ io.on('connection', (socket) => {
             hostMap.set(roomID, socket.id);
             socket.join(roomID);
             
+            // Notify any waiting students that the host has arrived
+            io.to(`${roomID}-waiting`).emit('host arrived');
+            
             const usersInRoom = [];
             const room = io.sockets.adapter.rooms.get(roomID);
             if (room) {
@@ -80,7 +83,8 @@ io.on('connection', (socket) => {
                     bg
                 });
             } else {
-                // Host is not here yet
+                // Host is not here yet, student joins waiting room channel
+                socket.join(`${roomID}-waiting`);
                 socket.emit('host missing');
             }
         }
@@ -92,6 +96,7 @@ io.on('connection', (socket) => {
         // The student socket needs to join the room
         const studentSocket = io.sockets.sockets.get(studentId);
         if (studentSocket) {
+            studentSocket.leave(`${roomID}-waiting`); // Leave waiting channel
             studentSocket.join(roomID);
             studentSocket.emit('admission approved');
             
@@ -128,7 +133,11 @@ io.on('connection', (socket) => {
     socket.on('returning signal', payload => {
         io.to(payload.callerID).emit('receiving returned signal', {
             signal: payload.signal,
-            id: socket.id
+            id: socket.id,
+            responderName: payload.responderName,
+            responderInitials: payload.responderInitials,
+            responderBg: payload.responderBg,
+            responderRole: payload.responderRole
         });
     });
 
@@ -175,6 +184,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        // Remove from hostMap if host is disconnecting
+        for (const [roomID, hostId] of hostMap.entries()) {
+            if (hostId === socket.id) {
+                hostMap.delete(roomID);
+                break;
+            }
+        }
         // Clear typing indicator if they were typing
         socket.broadcast.emit('user typing', { id: socket.id, name: '', isTyping: false });
         // Broadcast disconnection so clients can remove the peer

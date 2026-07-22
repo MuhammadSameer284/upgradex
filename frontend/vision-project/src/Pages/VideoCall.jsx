@@ -188,6 +188,7 @@ export default function VideoCall() {
     const [sProject, setSProject]         = useState("");
     const [sDate, setSDate]               = useState("");
     const [sNotes, setSNotes]             = useState("");
+    const [scheduleError, setScheduleError] = useState("");
 
     // ── Refs ─────────────────────────────────────────────────────
     const socketRef  = useRef(null);
@@ -262,7 +263,7 @@ export default function VideoCall() {
     }, []);
 
     const createPeer = useCallback((userToSignal, callerID, stream) => {
-        const peer = new Peer({ initiator: true, trickle: false, stream });
+        const peer = new Peer({ initiator: true, trickle: true, stream });
         peer.on("signal", signal => {
             socketRef.current?.emit("sending signal", {
                 userToSignal, callerID, signal,
@@ -281,9 +282,16 @@ export default function VideoCall() {
     }, [user, myInitials, myBg]);
 
     const addPeer = useCallback((incomingSignal, callerID, stream) => {
-        const peer = new Peer({ initiator: false, trickle: false, stream });
+        const peer = new Peer({ initiator: false, trickle: true, stream });
         peer.on("signal", signal => {
-            socketRef.current?.emit("returning signal", { signal, callerID });
+            socketRef.current?.emit("returning signal", {
+                signal,
+                callerID,
+                responderName: user?.name,
+                responderInitials: myInitials,
+                responderBg: myBg,
+                responderRole: user?.role
+            });
         });
         peer.on("stream", remoteStream => {
             peer.remoteStream = remoteStream;
@@ -292,7 +300,7 @@ export default function VideoCall() {
         peer.on("error", err => console.warn("Peer error (receiver):", err.message));
         peer.signal(incomingSignal);
         return peer;
-    }, []);
+    }, [user, myInitials, myBg]);
 
     // ─── Push a system message into chat ──────────────────────────────────
     const pushSystem = useCallback((text) => {
@@ -329,6 +337,18 @@ export default function VideoCall() {
         socket.on("admission denied",   () => setWaitStatus("denied"));
         socket.on("host missing",       () => setWaitStatus("host_missing"));
         socket.on("admission request",  (req) => setAdmissionRequests(prev => [...prev, req]));
+        
+        socket.on("host arrived", () => {
+            // Re-request join since host has arrived
+            socket.emit("request join", {
+                roomID: activeCall._id,
+                role: user?.role,
+                name: user?.name,
+                initials: myInitials,
+                bg: myBg,
+            });
+            setWaitStatus("waiting");
+        });
 
         // Record when we joined
         setJoinedAt(new Date());
@@ -353,6 +373,13 @@ export default function VideoCall() {
 
         // ── New participant arrives (fires on existing users) ────────
         socket.on("user joined", (payload) => {
+            const existing = peersRef.current.find(p => p.peerID === payload.callerID);
+            if (existing) {
+                // If it already exists, this is a trickle ICE candidate. Signal it!
+                existing.peer.signal(payload.signal);
+                return;
+            }
+
             const peer = addPeer(payload.signal, payload.callerID, localStreamRef.current);
             const obj = {
                 peerID: payload.callerID, peer,
@@ -380,10 +407,20 @@ export default function VideoCall() {
             );
         });
 
-        // ── ICE answer ───────────────────────────────────────────────
+        // ── ICE answer / Candidate ───────────────────────────────────
         socket.on("receiving returned signal", (payload) => {
             const item = peersRef.current.find(p => p.peerID === payload.id);
-            item?.peer?.signal(payload.signal);
+            if (item) {
+                item.peer.signal(payload.signal);
+                // Also update the responder's profile details so they are not "Connecting..."
+                if (payload.responderName) {
+                    item.name = payload.responderName;
+                    item.initials = payload.responderInitials;
+                    item.bg = payload.responderBg;
+                    item.role = payload.responderRole;
+                    setPeers(prev => [...prev]); // force re-render
+                }
+            }
         });
 
         // ── Chat ─────────────────────────────────────────────────────
@@ -681,11 +718,11 @@ export default function VideoCall() {
                 {/* Schedule Modal */}
                 {showSchedule && (
                     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}
-                        onClick={e => { if (e.target === e.currentTarget) setShowSchedule(false); }}>
+                        onClick={e => { if (e.target === e.currentTarget) { setShowSchedule(false); setScheduleError(""); } }}>
                         <div style={{ width: "340px", borderRadius: "18px", padding: "24px", background: "#13131f", border: "1px solid rgba(255,255,255,0.1)" }}>
                             <h2 style={{ color: "#fff", fontSize: "14px", fontWeight: 600, marginBottom: "16px" }}>Schedule a Session</h2>
                             {[
-                                { label: "Session title", val: sTitle, set: setSTitle, placeholder: "e.g. Code Review Session" },
+                                { label: "Session title *", val: sTitle, set: setSTitle, placeholder: "e.g. Code Review Session" },
                                 { label: "Project name", val: sProject, set: setSProject, placeholder: "e.g. E-Commerce Platform" },
                                 { label: "Notes / Agenda", val: sNotes, set: setSNotes, placeholder: "Optional agenda notes…" },
                             ].map(f => (
@@ -700,19 +737,34 @@ export default function VideoCall() {
                                 <input type="datetime-local" value={sDate} onChange={e => setSDate(e.target.value)}
                                     style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: "12px", outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
                             </div>
+                            
+                            {scheduleError && (
+                                <div style={{ color: "#E86C6B", fontSize: "11px", marginBottom: "12px", textAlign: "left" }}>
+                                    ⚠️ {scheduleError}
+                                </div>
+                            )}
+
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                                <button onClick={() => setShowSchedule(false)}
+                                <button onClick={() => { setShowSchedule(false); setScheduleError(""); }}
                                     style={{ padding: "9px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "none", color: "rgba(255,255,255,0.4)", fontSize: "12px", cursor: "pointer" }}>
                                     Cancel
                                 </button>
                                 <button onClick={async () => {
+                                    if (!sTitle.trim()) {
+                                        setScheduleError("Session title is required.");
+                                        return;
+                                    }
                                     try {
-                                        await scheduleCall({ title: sTitle, projectName: sProject, scheduledAt: sDate, notes: sNotes, duration: 60 });
+                                        setScheduleError("");
+                                        await scheduleCall({ title: sTitle.trim(), projectName: sProject.trim(), scheduledAt: sDate || new Date().toISOString(), notes: sNotes.trim(), duration: 60 });
                                         const res = await getCalls();
                                         setCalls(res.data);
                                         setShowSchedule(false);
                                         setSTitle(""); setSProject(""); setSDate(""); setSNotes("");
-                                    } catch (e) { console.error(e); }
+                                    } catch (e) {
+                                        console.error(e);
+                                        setScheduleError(e.response?.data?.message || "Failed to schedule session. Check server connections.");
+                                    }
                                 }}
                                     style={{ padding: "9px", borderRadius: "8px", background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
                                     Schedule
