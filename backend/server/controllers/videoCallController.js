@@ -17,24 +17,6 @@ export const getCalls = async (req, res) => {
             }
         }
 
-        // Seed a demo call if empty
-        if (calls.length === 0 && req.user.role === 'instructor') {
-            const instructor = await User.findById(req.user.id).select('name');
-            const demoCall = new VideoCall({
-                title: 'E-Commerce Platform Code Review',
-                scheduledAt: new Date(Date.now() + 3600000), // 1 hour from now
-                duration: 60,
-                projectName: 'E-Commerce Platform',
-                instructorId: req.user.id,
-                instructorName: instructor?.name || 'Instructor',
-                participants: [],
-                status: 'scheduled',
-                notes: 'Will cover auth controller implementation'
-            });
-            await demoCall.save();
-            calls = [demoCall];
-        }
-
         res.json(calls);
     } catch (error) {
         res.status(500).json({ message: 'Server Error', error: error.message });

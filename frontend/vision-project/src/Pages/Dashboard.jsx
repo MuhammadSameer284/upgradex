@@ -42,14 +42,19 @@ export default function Dashboard() {
 
             await updateTask(id, { done: updatedDone, status: updatedStatus });
 
-            setTasks(prev => prev.map(t => {
-                if (t._id !== id) return t;
-                return {
-                    ...t,
-                    done: updatedDone,
-                    status: updatedStatus,
-                };
-            }));
+            if (updatedDone) {
+                // Instantly remove from Today's Tasks (pending tasks) list
+                setTasks(prev => prev.filter(t => t._id !== id));
+            } else {
+                setTasks(prev => prev.map(t => {
+                    if (t._id !== id) return t;
+                    return {
+                        ...t,
+                        done: updatedDone,
+                        status: updatedStatus,
+                    };
+                }));
+            }
 
             setStatsData(prev => ({
                 ...prev,
@@ -107,7 +112,7 @@ export default function Dashboard() {
                         {today}
                     </div>
                     <h1 className="text-xl font-semibold text-white">
-                        Good morning, <span style={{ color: "#7F77DD" }}>{firstName}</span> 👋
+                        Welcome, <span style={{ color: "#7F77DD" }}>{user?.name || "User"}</span> 👋
                     </h1>
                 </div>
 
@@ -240,7 +245,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-4">
                         <span className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.7)" }}>Today's Tasks</span>
                         <button onClick={() => navigate("/kanban")} style={{ fontSize: "11px", color: "rgba(127,119,221,0.7)", background: "none", border: "none", cursor: "pointer" }}>
-                            Kanban →
+                            Workflow →
                         </button>
                     </div>
 

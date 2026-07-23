@@ -184,7 +184,7 @@ function InstructorKanbanView() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-base font-semibold text-white">Kanban Board</h1>
+                    <h1 className="text-base font-semibold text-white">Workflow Board</h1>
                     <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>Students' project status overview</p>
                 </div>
                 <div className="text-[10px] px-3 py-1.5 rounded-lg" style={{ background: 'rgba(29,158,117,0.1)', color: '#5DCAA5', border: '0.5px solid rgba(29,158,117,0.2)' }}>
@@ -299,7 +299,7 @@ export default function Kanban() {
                 setAllTasks(tasksRes.data);
                 setProjects(projectsRes.data);
             } catch (err) {
-                console.error("Failed to load Kanban tasks:", err);
+                console.error("Failed to load workflow :", err);
             }
         };
         fetchKanbanTasks();
@@ -399,7 +399,7 @@ export default function Kanban() {
             setTaskTag("");
             setShowModal(false);
         } catch (err) {
-            console.error("Failed to add task on Kanban:", err);
+            console.error("Failed to add task on Workflow:", err);
         }
     };
 
@@ -411,7 +411,7 @@ export default function Kanban() {
             {/* ── Header ── */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-base font-semibold text-white">Kanban Board</h1>
+                    <h1 className="text-base font-semibold text-white">Workflow Board</h1>
                     <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.25)" }}>
                         {selectedProject === "All" ? "All Projects" : selectedProject} · Sprint 2
                     </p>

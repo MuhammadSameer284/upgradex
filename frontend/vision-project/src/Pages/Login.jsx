@@ -10,6 +10,9 @@ function Login() {
     const [email, setEmail]     = useState("");
     const [password, setPassword] = useState("");
     const [error, setError]     = useState("");
+    const [showForgotModal, setShowForgotModal] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState("");
+    const [forgotSuccess, setForgotSuccess] = useState("");
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -147,7 +150,7 @@ function Login() {
 
                     {error && <p className="text-xs mt-3 text-center" style={{ color: "#E24B4A" }}>{error}</p>}
 
-                    <a className="block text-right text-xs mt-2 mb-4 cursor-pointer"
+                    <a onClick={() => setShowForgotModal(true)} className="block text-right text-xs mt-2 mb-4 cursor-pointer"
                         style={{ color: "rgba(127,119,221,0.8)" }}>
                         Forgot password?
                     </a>
@@ -165,6 +168,68 @@ function Login() {
                     </p>
                 </div>
             </form>
+
+            {/* ── Forgot Password Modal ── */}
+            {showForgotModal && (
+                <div
+                    className="fixed inset-0 flex items-center justify-center z-50 animate-fade-in"
+                    style={{ background: "rgba(0,0,0,0.65)" }}
+                    onClick={e => { if (e.target === e.currentTarget) { setShowForgotModal(false); setForgotSuccess(""); } }}
+                >
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!forgotEmail.trim()) return;
+                        setForgotSuccess("Password recovery link has been sent to your email!");
+                        setTimeout(() => {
+                            setShowForgotModal(false);
+                            setForgotEmail("");
+                            setForgotSuccess("");
+                        }, 3000);
+                    }}
+                        className="w-80 rounded-2xl p-6"
+                        style={{ background: "#12121f", border: "0.5px solid rgba(255,255,255,0.1)", backdropFilter: "blur(20px)" }}
+                    >
+                        <h2 className="text-sm font-semibold text-white mb-2">Reset Password</h2>
+                        <p className="text-[11px] mb-4" style={{ color: "rgba(255,255,255,0.35)" }}>
+                            Enter your email address and we'll send you a link to reset your password.
+                        </p>
+
+                        <input
+                            type="email"
+                            required
+                            placeholder="Email address"
+                            value={forgotEmail}
+                            onChange={e => setForgotEmail(e.target.value)}
+                            className="w-full rounded-lg px-3 py-2 text-xs text-white outline-none mb-4"
+                            style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+                        />
+
+                        {forgotSuccess && (
+                            <p className="text-[10px] text-center mb-3" style={{ color: "#5DCAA5" }}>
+                                {forgotSuccess}
+                            </p>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => { setShowForgotModal(false); setForgotSuccess(""); }}
+                                className="py-2 rounded-lg text-xs font-medium"
+                                style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "none", cursor: "pointer" }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="py-2 rounded-lg text-xs font-medium text-white"
+                                style={{ background: "linear-gradient(135deg,#7F77DD,#1D9E75)", border: "none", cursor: "pointer" }}
+                            >
+                                Send Link
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
         </div>
     );
 }

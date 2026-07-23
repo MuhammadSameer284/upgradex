@@ -56,28 +56,6 @@ export const getReviews = async (req, res) => {
             reviews = await CodeReview.find({ userId: req.user.id });
         }
 
-        // Auto-seed if no reviews exist (for both student and instructor to avoid empty states)
-        if (reviews.length === 0) {
-            const user = await User.findById(req.user.id);
-            const name = user ? user.name : (req.user.role === 'instructor' ? "Instructor" : "Student");
-            const displayStudentName = req.user.role === 'instructor' ? "Demo Student" : name;
-
-            const seededReview = new CodeReview({
-                studentName: displayStudentName,
-                project: "E-Commerce Platform",
-                file: "auth/authController.js",
-                code: SAMPLE_CODE,
-                comments: initialCommentsSeed,
-                status: "pending",
-                initials: displayStudentName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase(),
-                bg: "linear-gradient(135deg,#534AB7,#7F77DD)",
-                time: "2h ago",
-                userId: req.user.id
-            });
-            await seededReview.save();
-            reviews = [seededReview];
-        }
-
         res.json(reviews);
     } catch (error) {
         res.status(500).json({ message: "Server Error", error: error.message });

@@ -32,15 +32,6 @@ export const getTasks = async (req, res) => {
             tasks = await Task.find({ userId: req.user.id }).sort({ order: 1 });
         }
 
-        // Seed initial tasks if empty for a student
-        if (tasks.length === 0 && req.user.role === 'student') {
-            const seeded = initialTasksSeed.map(t => ({
-                ...t,
-                userId: req.user.id
-            }));
-            tasks = await Task.insertMany(seeded);
-        }
-
         res.json(tasks);
     } catch (error) {
         res.status(500).json({ message: "Server Error", error: error.message });

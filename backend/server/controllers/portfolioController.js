@@ -22,15 +22,6 @@ export const getPortfolios = async (req, res) => {
             portfolios = await Portfolio.find({ userId: req.user.id });
         }
 
-        // Seed initial portfolio items if empty for student
-        if (portfolios.length === 0 && req.user.role === 'student') {
-            const seeded = initialPortfolioSeed.map(p => ({
-                ...p,
-                userId: req.user.id
-            }));
-            portfolios = await Portfolio.insertMany(seeded);
-        }
-
         res.json(portfolios);
     } catch (error) {
         res.status(500).json({ message: "Server Error", error: error.message });

@@ -1,31 +1,64 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../Context/authContext.jsx";
+import { getProjects } from "../config/projectService.jsx";
+import { getTasks } from "../config/taskService.jsx";
+import { getReviews } from "../config/codeReviewService.jsx";
 
 function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
+    const [projectCount, setProjectCount] = useState(0);
+    const [taskCount, setTaskCount] = useState(0);
+    const [reviewCount, setReviewCount] = useState(0);
+
     const handleLogout = () => {
         logout();
         navigate("/login");
     };
+
+    useEffect(() => {
+        if (!user) return;
+        const fetchCounts = async () => {
+            try {
+                if (user.role === 'instructor') {
+                    const [projRes, revRes] = await Promise.all([
+                        getProjects(),
+                        getReviews()
+                    ]);
+                    setProjectCount(projRes.data.length);
+                    setReviewCount(revRes.data.filter(r => r.status === 'pending').length);
+                } else {
+                    const [projRes, taskRes] = await Promise.all([
+                        getProjects(),
+                        getTasks()
+                    ]);
+                    setProjectCount(projRes.data.length);
+                    setTaskCount(taskRes.data.filter(t => !t.done).length);
+                }
+            } catch (err) {
+                console.error("Failed to load sidebar counts:", err);
+            }
+        };
+        fetchCounts();
+    }, [user]);
 
     const studentSections = [
         {
             label: "MAIN",
             items: [
                 { path: "/dashboard", label: "Dashboard",    icon: "ti-layout-dashboard", badge: null },
-                { path: "/projects",  label: "Projects",     icon: "ti-folder",           badge: "3"  },
-                { path: "/tasks",     label: "Tasks",        icon: "ti-checklist",        badge: "7"  },
+                { path: "/projects",  label: "Projects",     icon: "ti-folder",           badge: projectCount > 0 ? String(projectCount) : null },
+                { path: "/tasks",     label: "Tasks",        icon: "ti-checklist",        badge: taskCount > 0 ? String(taskCount) : null },
             ],
         },
         {
             label: "COLLABORATE",
             items: [
                 { path: "/review",    label: "Code Review",  icon: "ti-code",             badge: null },
-                { path: "/kanban",    label: "Kanban Board", icon: "ti-layout-kanban",    badge: null },
+                { path: "/kanban",    label: "Workflow Board", icon: "ti-layout-kanban",    badge: null },
                 { path: "/video",     label: "Video Calls",  icon: "ti-video",            badge: null },
             ],
         },
@@ -43,14 +76,14 @@ function Sidebar() {
             label: "MAIN",
             items: [
                 { path: "/instructor/dashboard", label: "Dashboard",      icon: "ti-layout-dashboard", badge: null },
-                { path: "/projects",             label: "All Projects",   icon: "ti-folder",           badge: null },
+                { path: "/projects",             label: "All Projects",   icon: "ti-folder",           badge: projectCount > 0 ? String(projectCount) : null },
             ],
         },
         {
             label: "MANAGE",
             items: [
-                { path: "/review",               label: "Code Reviews",   icon: "ti-code",             badge: "2"  },
-                { path: "/kanban",               label: "Kanban Board",   icon: "ti-layout-kanban",    badge: null },
+                { path: "/review",               label: "Code Reviews",   icon: "ti-code",             badge: reviewCount > 0 ? String(reviewCount) : null },
+                { path: "/kanban",               label: "Workflow Board",   icon: "ti-layout-kanban",    badge: null },
                 { path: "/video",                label: "Video Calls",    icon: "ti-video",            badge: null },
             ],
         },

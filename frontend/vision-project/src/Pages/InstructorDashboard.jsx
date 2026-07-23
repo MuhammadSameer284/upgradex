@@ -57,12 +57,12 @@ export default function InstructorDashboard() {
                 <div>
                     <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.25)" }}>{today}</div>
                     <h1 className="text-xl font-semibold text-white">
-                        Good morning, <span style={{ color: "#7F77DD" }}>
-                            {user?.name?.split(" ")[0] || "Instructor"}
+                        Welcome, <span style={{ color: "#7F77DD" }}>
+                            {user?.name || "Instructor"}
                         </span> 👋
                     </h1>
                     <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.25)" }}>
-                        Instructor Dashboard · Batch 42
+                        Instructor Dashboard
                     </p>
                 </div>
 
@@ -141,7 +141,7 @@ export default function InstructorDashboard() {
                         <span className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.7)" }}>
                             Student progress
                         </span>
-                        <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>Batch 42</span>
+                        <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>Progress Overview</span>
                     </div>
 
                     {students.map((s, i) => (

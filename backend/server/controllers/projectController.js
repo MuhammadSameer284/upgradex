@@ -83,15 +83,6 @@ export const getProjects = async (req, res) => {
             projects = [...ownProjects, ...sharedProjects];
         }
 
-        // Seed initial projects for new students
-        if (projects.length === 0 && req.user.role === 'student') {
-            const seeded = initialProjectsSeed.map(p => ({
-                ...p,
-                userId: req.user.id
-            }));
-            projects = await Project.insertMany(seeded);
-        }
-
         res.json(projects);
     } catch (error) {
         res.status(500).json({ message: "Server Error", error: error.message });
